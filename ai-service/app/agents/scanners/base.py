@@ -44,6 +44,10 @@ class BaseScannerNode(ABC):
             # Fetch fresh data
             items = await self.fetch(state.get("options", {}))
 
+            # Log warning if no items returned
+            if not items:
+                logger.warning("Scanner returned 0 items", platform=self.platform)
+
             # Cache results (TTL: 30 minutes)
             if items:
                 await self.cache.set(cache_key, items, ttl=1800)

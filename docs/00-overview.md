@@ -1,182 +1,197 @@
-# Tổng Quan Hệ Thống — Marketing & Content Creator AI Agent
+# Tong Quan He Thong — AI Marketing Multi-Agent System
 
-## 1. Vấn đề cần giải quyết
+## 1. Van de can giai quyet
 
-Các doanh nghiệp nhỏ (SMB) và content creator cá nhân tốn **3–5 giờ/ngày** để:
-- Tìm kiếm xu hướng thủ công trên TikTok, Facebook, Google
-- Viết caption, hashtag, script cho từng nền tảng
-- Tạo hình ảnh/video minh họa
-- Lên lịch và đăng bài đúng giờ
-- Theo dõi hiệu quả và điều chỉnh chiến lược
+Cac doanh nghiep nho (SMB) va content creator ca nhan ton **3-5 gio/ngay** de:
+- Tim kiem xu huong thu cong tren TikTok, Facebook, Google
+- Viet caption, hashtag, script cho tung nen tang
+- Tao hinh anh minh hoa
+- Len lich va dang bai dung gio
+- Theo doi hieu qua va dieu chinh chien luoc
 
-**Mục tiêu:** Xây dựng hệ thống Multi-Agent AI tự động hóa toàn bộ pipeline này,
-giúp tiết kiệm thời gian và tăng hiệu quả tiếp cận organic 20–40%.
+**Muc tieu:** Xay dung he thong AI Multi-Agent tu dong hoa toan bo pipeline marketing noi dung end-to-end, bao gom:
+- Thu thap, phan tich xu huong va tao bao cao xu huong toan dien (Trending Scanner Agent)
+- Sinh noi dung tu dong (caption, hashtag, script) da phong cach, da nen tang
+- Tao hinh anh tu dong voi brand template
+- Kiem duyet chat luong noi dung bang AI (auto-review loop)
+- Len lich dang bai toi uu va tu dong dang len cac nen tang
+- Thu thap hieu qua bai dang va tu dong dieu chinh chien luoc noi dung
+- Orchestrator Agent dieu phoi toan bo pipeline theo mo hinh Router Workflow
 
 ---
 
-## 2. Kiến trúc tổng thể
+## 2. Kien truc tong the — Router Workflow
 
-```mermaid
-graph TB
-    User[👤 Người dùng]
+He thong su dung kien truc **Multi-Agent voi Orchestrator Agent trung tam** hoat dong theo mo hinh **Router Workflow**. Orchestrator khong tu thuc hien tac vu ma phan loai trang thai hien tai cua pipeline, sau do dinh tuyen (route) den dung agent chuyen trach de xu ly. Sau khi agent hoan thanh, ket qua quay ve Orchestrator de quyet dinh buoc tiep theo.
 
-    subgraph Frontend ["🖥️ Frontend — Next.js 15"]
-        Dashboard[Dashboard]
-        TrendUI[Trend Radar]
-        ContentUI[Content Studio]
-        MediaUI[Visual Factory]
-        ScheduleUI[Scheduler]
-        AnalyticsUI[Analytics]
-    end
+### Tai sao chon Router Workflow?
 
-    subgraph Backend ["⚙️ Backend — NestJS"]
-        API[REST API Gateway]
-        Auth[Auth Module]
-        Queue[BullMQ Queue]
-        WS[WebSocket Gateway]
-    end
+- Pipeline co luong tuan tu ro rang nhung can re nhanh linh hoat: dung cho human review, bo qua stage, hoac quay lai stage truoc
+- Router dung logic **rule-based** (khong dung LLM cho routing) — giam chi phi va tang toc do
+- Ho tro human-in-the-loop tu nhien: kiem tra trang thai "pending_review" va tam dung pipeline
+- De mo rong: them agent chi can them node va dieu kien route
+- Ho tro 2 che do: one-time va daemon lien tuc
 
-    subgraph AIService ["🤖 AI Service — FastAPI + LangGraph"]
-        Supervisor[Supervisor Agent]
-        TrendAgent[Trend Agent]
-        ContentAgent[Content Agent]
-        MediaAgent[Media Agent]
-        SchedulerAgent[Scheduler Agent]
-        PublisherAgent[Publisher Agent]
-        AnalyticsAgent[Analytics Agent]
-    end
+### So do kien truc phan tang
 
-    subgraph DataSources ["📡 Nguồn dữ liệu"]
-        GoogleTrends[Google Trends]
-        Reddit[Reddit API]
-        SocialAPIs[Facebook / Instagram / TikTok]
-    end
-
-    subgraph AIProviders ["🧠 AI Providers"]
-        Claude[Claude Sonnet 4.6]
-        DALLE[DALL-E 3]
-        StabilityAI[Stability AI]
-    end
-
-    subgraph Storage ["💾 Storage"]
-        PostgreSQL[(PostgreSQL)]
-        Redis[(Redis)]
-        S3[AWS S3]
-    end
-
-    User --> Frontend
-    Frontend <--> API
-    API <--> Auth
-    API --> Queue
-    Queue --> AIService
-    WS --> Frontend
-    Supervisor --> TrendAgent & ContentAgent & MediaAgent
-    Supervisor --> SchedulerAgent & PublisherAgent & AnalyticsAgent
-    TrendAgent --> GoogleTrends & Reddit
-    ContentAgent --> Claude
-    MediaAgent --> DALLE & StabilityAI
-    PublisherAgent --> SocialAPIs
-    AnalyticsAgent --> SocialAPIs
-    AIService <--> PostgreSQL
-    Queue --> Redis
-    MediaAgent --> S3
+```
+PRESENTATION    Frontend Layer — Next.js
+                Dashboard: Trend List | Content Review | Schedule Calendar | Analytics
+                              |
+API GATEWAY     Backend API — NestJS
+                REST Endpoints | Auth | WebSocket Real-time Status
+                              |
+AI ENGINE       AI Orchestrator — FastAPI + LangGraph
+                Pipeline Orchestration | LLM Calls | Graph-based Router Workflow
+                              |
+ORCHESTRATOR    Orchestrator Agent — Router Workflow
+                Classify State -> Route to Agent | Content Pool | Human Review Gate
+                      |                |                |
+AGENTS          Trending Scanner    Post Generator    Publisher & Analyzer
+                Crawl, Analyze      Content & Media   Publish & Feedback
+                & Report
+                              |
+DATA LAYER      PostgreSQL              Redis + Bull          AWS S3
+                Users | Posts |         Queue | Cache         Media & Reports
+                Strategy | Content Pool
+                              |
+EXTERNAL        AI APIs                 Social Platforms
+                OpenAI | Stability AI   Meta | TikTok | LinkedIn
 ```
 
----
+### Bang mo ta cac layer he thong
 
-## 3. Core Pipeline (7 giai đoạn)
-
-| Bước | Stage | Agent | Input | Output |
-|------|-------|-------|-------|--------|
-| 1 | **Trend Discovery** | TrendAgent | Từ khóa ngành | Danh sách trending topics + score |
-| 2 | **Analysis** | TrendAgent + LLM | Trending data | Báo cáo sentiment + ranking |
-| 3 | **Content Generation** | ContentAgent | Trend report | Caption, hashtag, script (3 phong cách) |
-| 4 | **Media Creation** | MediaAgent | Caption đã duyệt | Image assets (S3 URL) |
-| 5 | **Scheduling** | SchedulerAgent | Historical analytics | Post schedule (giờ vàng) |
-| 6 | **Auto Publish** | PublisherAgent | Approved content + schedule | Published posts |
-| 7 | **Performance Loop** | AnalyticsAgent | Post IDs | Metrics report + strategy update |
-
-**Human-in-the-loop checkpoints:**
-- Sau bước 3: User review & edit content trước khi tạo ảnh
-- Sau bước 4: User approve/reject ảnh trước khi lên lịch
+| Layer | Technology | Mo ta |
+|-------|-----------|-------|
+| **Frontend** | Next.js | Dashboard quan ly: trend list, content review, schedule calendar, analytics |
+| **Backend API** | NestJS | REST endpoints, authentication, WebSocket real-time status |
+| **AI Engine** | FastAPI + LangGraph | Pipeline orchestration, LLM calls, graph-based router workflow |
+| **Orchestrator** | LangGraph Router | Router Workflow: phan loai state, dinh tuyen agent, content pool, human review gate, daemon/one-time |
+| **Database** | PostgreSQL | Users, posts, strategies, analytics, trend data, content pool |
+| **Cache + Queue** | Redis (Bull) | Task queue cho scheduling, caching prompt tuong tu |
+| **Storage** | AWS S3 | Luu tru media assets va file bao cao trend |
+| **External APIs** | OpenAI, Stability AI, Meta, TikTok | LLM, image generation, social platform APIs |
 
 ---
 
-## 4. Tech Stack
+## 3. 3 Nhom Agent Chuyen Trach
 
-| Layer | Technology | Version | Lý do chọn |
+| Nhom | Agent | Stages | Chuc nang |
+|------|-------|--------|-----------|
+| **Trending Scanner** | Trending-Scanner | Stage 1-2-3 | Thu thap, phan tich xu huong, tao bao cao |
+| **Post Generation** | Post-Generation | Stage 4-5 | Sinh noi dung (caption, hashtag, script) + tao hinh anh |
+| **Publish & Feedback** | Publish-Post + Performance-Upgrade | Stage 6-7-8 | Len lich, dang bai tu dong, thu thap metrics |
+
+---
+
+## 4. Core Pipeline (8 giai doan)
+
+| # | Stage | Agent | Mo ta | Output |
+|---|-------|-------|-------|--------|
+| 1 | **Trend Discovery** | Trending-Scanner | Crawl du lieu tu Google Trends, TikTok, Instagram, Twitter/X | List trends tho {topic, volume, platform, region} |
+| 2 | **Trend Analysis** | Trending-Scanner | LLM phan tich engagement, sentiment, lifecycle. Xep hang | Trends da xep hang {topic, score, sentiment, lifecycle} |
+| 3 | **Report Generation** | Trending-Scanner | Tao bao cao xu huong (.md) — dau vao cho Content Generation | File bao cao tren S3, metadata, tom tat JSON |
+| 4 | **Content Generation** | Post-Generation | LLM doc bao cao, sinh caption, hashtag, script. Luu Content Pool | Noi dung {caption, hashtags, script}, bien the platform |
+| 5 | **Media Creation** | Post-Generation | API tao anh, ghep brand template, resize. Luu Content Pool | File anh raw + branded, URL S3 |
+| 6 | **Scheduling** | Publish-Post | Phan tich khung gio vang. Len lich dang toi uu | Lich dang, gio vang, task Redis queue |
+| 7 | **Auto Publish** | Publish-Post | Goi API dang bai tu dong. Cross-post da nen tang | ID bai da dang, trang thai, thoi gian |
+| 8 | **Performance Feedback** | Performance-Upgrade | (Async) Thu thap metrics sau 24h. Cap nhat Strategy | Bao cao hieu qua, strategy v(N+1) |
+
+### 2 Che do Pipeline
+
+**Che do 1: Hoan toan tu dong** — Noi dung tu Stage 4-5 di thang den Scheduling va Publish khong can human review.
+
+**Che do 2: Co Human Review Gate** — Sau Stage 5 (Media Creation), Orchestrator tam dung va cho user duyet tren Dashboard. Reject → quay lai Stage 4 voi feedback.
+
+---
+
+## 5. Luong giao tiep giua cac Agent
+
+Tat ca Agent giao tiep thong qua Orchestrator Agent, **khong giao tiep truc tiep voi nhau**:
+
+- **Router Workflow (LangGraph):** Orchestrator la node trung tam trong StateGraph. Sau moi agent hoan thanh, luong quay ve Orchestrator.
+- **Shared State:** Moi node doc/ghi vao state chung. Orchestrator kiem tra `current_stage`, `content_pool_status`, `human_review_status` de route.
+- **Content Pool:** Noi dung luu vao PostgreSQL. Orchestrator chi route den Publish khi co noi dung da duyet.
+- **Human Review Gate:** Orchestrator chuyen sang "pending_review" va cho user duyet. Co the tat de chay hoan toan tu dong.
+- **Async Feedback Loop:** Performance Upgrade Agent chay doc lap, khong block main pipeline.
+
+---
+
+## 6. Tech Stack
+
+| Layer | Technology | Version | Ly do chon |
 |-------|-----------|---------|------------|
-| **Frontend** | Next.js (App Router) | 15.x | Thesis yêu cầu, RSC + SSR |
+| **Frontend** | Next.js (App Router) | 15.x | RSC + SSR |
 | **UI Components** | shadcn/ui + Tailwind CSS | latest | Ready-to-use, dark mode, accessible |
-| **Backend API** | NestJS | 10.x | Thesis yêu cầu, TypeScript, modular DI |
+| **Backend API** | NestJS | 10.x | TypeScript, modular DI |
 | **AI Service** | FastAPI | 0.115.x | Python-native cho LangGraph/LangChain |
-| **Agent Framework** | LangGraph | 0.2.x | Stateful graphs, human-in-the-loop, checkpointing |
-| **LLM chính** | Claude Sonnet 4.6 (`claude-sonnet-4-6`) | latest | Hiệu năng cao, context dài |
-| **Image Generation** | DALL-E 3 (OpenAI) | — | Chất lượng cao, API đơn giản |
-| **Image Gen backup** | Stability AI | SD 3.5 | Chi phí thấp hơn |
-| **Database** | PostgreSQL | 16.x | Thesis yêu cầu, ACID |
+| **Agent Framework** | LangGraph | 1.x | Stateful graphs, human-in-the-loop, checkpointing |
+| **LLM chinh** | Claude Sonnet 4.6 | latest | Hieu nang cao, context dai |
+| **Image Generation** | DALL-E 3 (OpenAI) | — | Chat luong cao, API don gian |
+| **Image Gen backup** | Stability AI | SD 3.5 | Chi phi thap hon |
+| **Database** | PostgreSQL | 16.x | ACID |
 | **ORM (Backend)** | Prisma | 5.x | Type-safe migrations, NestJS integration |
 | **ORM (AI Service)** | SQLAlchemy + Alembic | 2.x | Python standard |
 | **Job Queue** | BullMQ + Redis | 5.x | Scheduling, retry logic, rate limiting |
-| **Trend Crawl** | pytrends + PRAW | latest | Free, không cần API key (Google Trends) |
-| **Web Scraping** | Playwright | 1.x | Dynamic content, TikTok trends |
-| **Media Storage** | AWS S3 (hoặc Cloudflare R2) | — | Object storage cho ảnh generated |
+| **Media Storage** | AWS S3 (hoac Cloudflare R2) | — | Object storage cho anh generated |
 | **LLM Observability** | LangSmith | — | Debug traces, prompt management |
 | **Real-time** | WebSocket (NestJS Gateway) | — | Pipeline status live updates |
 | **Containerization** | Docker + Docker Compose | — | Dev & prod environment |
 | **Auth** | JWT + Passport.js | — | NestJS standard |
-| **Version Control** | GitHub | — | Thesis yêu cầu |
 
 ---
 
-## 5. Cấu trúc thư mục dự án
+## 7. Cau truc thu muc du an
 
 ```
 marketing-content/
-├── strategy/                    # Tài liệu chiến lược (thư mục này)
-├── frontend/                    # Next.js 15 App
+├── docs/                           # Tai lieu thiet ke
+│   ├── features/                   # Chi tiet tung feature (F01-F10)
+│   └── *.md                        # Tong quan, roadmap, schema, API, UX
+├── frontend/                       # Next.js 15 App (planned)
+├── backend/                        # NestJS API (planned)
+├── ai-service/                     # FastAPI + LangGraph (active)
 │   ├── app/
-│   │   ├── (auth)/
-│   │   ├── dashboard/
-│   │   ├── trends/
-│   │   ├── content/
-│   │   ├── media/
-│   │   ├── schedule/
-│   │   ├── analytics/
-│   │   └── settings/
-│   ├── components/
-│   └── lib/
-├── backend/                     # NestJS API
-│   ├── src/
-│   │   ├── auth/
-│   │   ├── trends/
-│   │   ├── content/
-│   │   ├── media/
-│   │   ├── schedule/
-│   │   ├── analytics/
-│   │   └── websocket/
-│   └── prisma/
-│       └── schema.prisma
-├── ai-service/                  # FastAPI + LangGraph
-│   ├── agents/
-│   │   ├── trend_agent/
-│   │   ├── content_agent/
-│   │   ├── media_agent/
-│   │   ├── scheduler_agent/
-│   │   ├── publisher_agent/
-│   │   ├── analytics_agent/
-│   │   └── supervisor/
-│   ├── tools/
-│   └── main.py
+│   │   ├── agents/
+│   │   │   ├── supervisor.py       # LangGraph graph builder
+│   │   │   ├── state.py            # TrendScanState TypedDict
+│   │   │   ├── analyzer.py         # Claude-powered analysis
+│   │   │   └── scanners/           # 6 platform scanner nodes
+│   │   ├── tools/                  # Platform API wrappers
+│   │   ├── core/                   # Cache, rate limiter, dedup, retry
+│   │   ├── db/                     # SQLAlchemy models + session
+│   │   ├── api/v1/                 # REST endpoints
+│   │   └── main.py                 # FastAPI app
+│   ├── alembic/                    # Database migrations
+│   └── pyproject.toml
 └── docker-compose.yml
 ```
 
 ---
 
-## 6. Giới hạn phạm vi (Out of scope)
+## 8. Gioi han pham vi (Out of scope)
 
-- Không tạo/phân tích video dài (>60 giây)
-- Không triển khai ở quy mô enterprise (>1000 người dùng)
-- Twitter/X API không ưu tiên (chi phí cao)
-- Không có tính năng paid advertising management
-- TikTok publishing là stretch goal (API phức tạp)
+- Khong tao/phan tich video dai (>60 giay)
+- Khong trien khai o quy mo enterprise (>1000 nguoi dung)
+- Twitter/X API khong uu tien (chi phi cao)
+- Khong co tinh nang paid advertising management
+- TikTok publishing la stretch goal (API phuc tap)
+
+---
+
+## 9. Feature Index
+
+Xem chi tiet tung feature tai [docs/features/](features/):
+
+| Feature | Doc | Agent | Stage |
+|---------|-----|-------|-------|
+| Orchestrator Router | [F01](features/F01-orchestrator-router.md) | Orchestrator | — |
+| Trend Discovery | [F02](features/F02-trend-discovery.md) | Trending-Scanner | 1 |
+| Trend Analysis | [F03](features/F03-trend-analysis.md) | Trending-Scanner | 2 |
+| Report Generation | [F04](features/F04-report-generation.md) | Trending-Scanner | 3 |
+| Content Generation | [F05](features/F05-content-generation.md) | Post-Generation | 4 |
+| Media Creation | [F06](features/F06-media-creation.md) | Post-Generation | 5 |
+| Scheduling | [F07](features/F07-scheduling.md) | Publish-Post | 6 |
+| Auto Publish | [F08](features/F08-auto-publish.md) | Publish-Post | 7 |
+| Performance Feedback | [F09](features/F09-performance-feedback.md) | Performance-Upgrade | 8 |
+| Human Review Gate | [F10](features/F10-human-review-gate.md) | Orchestrator | — |

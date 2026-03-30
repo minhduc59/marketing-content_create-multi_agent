@@ -37,7 +37,9 @@ Return a JSON array where each object has:
   "related_topics": ["...", "..."]
 }
 
-Be accurate and consistent. Analyze ALL items provided."""
+Be accurate and consistent. Analyze ALL items provided.
+
+If the trend title or description is in Vietnamese, provide related_topics in Vietnamese as well."""
 
 
 def _chunks(lst: list, n: int):

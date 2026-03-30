@@ -7,9 +7,32 @@ from app.db.models.enums import Platform
 
 
 class ScheduleRequest(BaseModel):
-    cron_expression: str = Field(examples=["0 */6 * * *"])
-    platforms: list[Platform]
-    is_active: bool = True
+    cron_expression: str = Field(description="Cron expression, e.g. '0 */6 * * *' for every 6 hours")
+    platforms: list[Platform] = Field(description="Platforms to include in the scheduled scan")
+    is_active: bool = Field(default=True, description="Whether the schedule is active")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "summary": "Every 6 hours — all platforms",
+                    "value": {
+                        "cron_expression": "0 */6 * * *",
+                        "platforms": ["youtube", "google_news"],
+                        "is_active": True,
+                    },
+                },
+                {
+                    "summary": "Daily at 9am — Google News only",
+                    "value": {
+                        "cron_expression": "0 9 * * *",
+                        "platforms": ["google_news"],
+                        "is_active": True,
+                    },
+                },
+            ]
+        }
+    }
 
 
 class ScheduleResponse(BaseModel):
