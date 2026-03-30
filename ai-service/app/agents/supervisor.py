@@ -2,21 +2,21 @@ import time
 import uuid
 from datetime import datetime, timezone
 
+import redis.asyncio as aioredis
 import structlog
-from langgraph.constants import Send
+from langgraph.types import Send
 from langgraph.graph import END, START, StateGraph
-from redis.asyncio import Redis
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.analyzer import analyzer_node
-from app.agents.scanners.google_trends import GoogleTrendsScannerNode
-from app.agents.scanners.instagram import InstagramScannerNode
-from app.agents.scanners.tiktok import TikTokScannerNode
-from app.agents.scanners.twitter import TwitterScannerNode
+from app.agents.content_saver import content_saver_node
+from app.agents.reporter import reporter_node
+from app.agents.scanners.google_news import GoogleNewsScannerNode
+from app.agents.scanners.google_news_topic import GoogleNewsTopicScannerNode
 from app.agents.scanners.youtube import YouTubeScannerNode
 from app.agents.state import TrendScanState
 from app.api.v1.schemas.scan import ScanRequest
+from app.config import get_settings
 from app.core.cache import Cache
 from app.core.rate_limiter import RateLimiter
 from app.db.models import ScanRun, ScanStatus, TrendComment, TrendItem
@@ -27,10 +27,8 @@ logger = structlog.get_logger()
 # Scanner node name -> platform mapping
 SCANNER_MAP = {
     "youtube": "youtube_scanner",
-    "tiktok": "tiktok_scanner",
-    "twitter": "twitter_scanner",
-    "instagram": "instagram_scanner",
-    "google_trends": "google_trends_scanner",
+    "google_news": "google_news_scanner",
+    "google_news_topic": "google_news_topic_scanner",
 }
 
 
@@ -39,23 +37,21 @@ def build_trend_scan_graph(rate_limiter: RateLimiter, cache: Cache) -> StateGrap
 
     # Create scanner node instances
     youtube_node = YouTubeScannerNode(rate_limiter, cache)
-    tiktok_node = TikTokScannerNode(rate_limiter, cache)
-    twitter_node = TwitterScannerNode(rate_limiter, cache)
-    instagram_node = InstagramScannerNode(rate_limiter, cache)
-    google_trends_node = GoogleTrendsScannerNode(rate_limiter, cache)
+    google_news_node = GoogleNewsScannerNode(rate_limiter, cache)
+    google_news_topic_node = GoogleNewsTopicScannerNode(rate_limiter, cache)
 
     graph = StateGraph(TrendScanState)
 
     # Add scanner nodes
     graph.add_node("youtube_scanner", youtube_node)
-    graph.add_node("tiktok_scanner", tiktok_node)
-    graph.add_node("twitter_scanner", twitter_node)
-    graph.add_node("instagram_scanner", instagram_node)
-    graph.add_node("google_trends_scanner", google_trends_node)
+    graph.add_node("google_news_scanner", google_news_node)
+    graph.add_node("google_news_topic_scanner", google_news_topic_node)
 
     # Add post-scan nodes
     graph.add_node("collect_results", collect_results_node)
     graph.add_node("analyzer", analyzer_node)
+    graph.add_node("content_saver", content_saver_node)
+    graph.add_node("reporter", reporter_node)
     graph.add_node("persist_results", persist_results_node)
 
     # Fan-out: START routes to requested scanner nodes in parallel
@@ -66,10 +62,10 @@ def build_trend_scan_graph(rate_limiter: RateLimiter, cache: Cache) -> StateGrap
             node_name = SCANNER_MAP.get(platform)
             if node_name:
                 sends.append(Send(node_name, state))
+            else:
+                logger.warning("Unknown platform requested", platform=platform)
         if not sends:
-            # Default: scan all
-            for node_name in SCANNER_MAP.values():
-                sends.append(Send(node_name, state))
+            logger.warning("No valid platforms requested, skipping scan")
         return sends
 
     graph.add_conditional_edges(START, route_to_scanners)
@@ -78,9 +74,11 @@ def build_trend_scan_graph(rate_limiter: RateLimiter, cache: Cache) -> StateGrap
     for node_name in SCANNER_MAP.values():
         graph.add_edge(node_name, "collect_results")
 
-    # Sequential: collect -> analyze -> persist
+    # Sequential: collect -> analyze -> save content -> report -> persist
     graph.add_edge("collect_results", "analyzer")
-    graph.add_edge("analyzer", "persist_results")
+    graph.add_edge("analyzer", "content_saver")
+    graph.add_edge("content_saver", "reporter")
+    graph.add_edge("reporter", "persist_results")
     graph.add_edge("persist_results", END)
 
     return graph.compile()
@@ -149,6 +147,10 @@ async def persist_results_node(state: TrendScanState) -> dict:
             scan_run.total_items_found = len(analyzed)
             scan_run.completed_at = datetime.now(timezone.utc)
 
+            report_file_path = state.get("report_file_path", "")
+            if report_file_path:
+                scan_run.report_file_path = report_file_path
+
             if platforms_failed and not platforms_completed:
                 scan_run.status = ScanStatus.FAILED
             elif platforms_failed:
@@ -164,7 +166,7 @@ async def persist_results_node(state: TrendScanState) -> dict:
                     description=(item.get("description") or "")[:5000],
                     content_body=item.get("content_body"),
                     source_url=item.get("source_url"),
-                    platform=item.get("_platform", item.get("platform", "google_trends")),
+                    platform=item.get("_platform", item.get("platform", "youtube")).lower(),
                     tags=item.get("tags", []),
                     hashtags=item.get("hashtags", []),
                     views=item.get("views"),
@@ -233,22 +235,26 @@ def _parse_datetime(value) -> datetime | None:
     return None
 
 
-async def run_scan(scan_run_id: str, request: ScanRequest, db: AsyncSession, redis: Redis):
+async def run_scan(scan_run_id: str, request: ScanRequest):
     """Execute the full trend scan pipeline."""
     start_time = time.time()
+    settings = get_settings()
+    redis = None
 
     try:
         # Update status to RUNNING
-        result = await db.execute(
-            select(ScanRun).where(ScanRun.id == uuid.UUID(scan_run_id))
-        )
-        scan_run = result.scalar_one_or_none()
-        if scan_run:
-            scan_run.status = ScanStatus.RUNNING
-            scan_run.langgraph_thread_id = str(uuid.uuid4())
-            await db.commit()
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(ScanRun).where(ScanRun.id == uuid.UUID(scan_run_id))
+            )
+            scan_run = result.scalar_one_or_none()
+            if scan_run:
+                scan_run.status = ScanStatus.RUNNING
+                scan_run.langgraph_thread_id = str(uuid.uuid4())
+                await db.commit()
 
         # Build and run the graph
+        redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
         rate_limiter = RateLimiter(redis)
         cache = Cache(redis)
         graph = build_trend_scan_graph(rate_limiter, cache)
@@ -260,10 +266,14 @@ async def run_scan(scan_run_id: str, request: ScanRequest, db: AsyncSession, red
                 "max_items_per_platform": request.options.max_items_per_platform,
                 "include_comments": request.options.include_comments,
                 "region": request.options.region,
+                "topics": request.options.topics,
             },
             raw_results=[],
             analyzed_trends=[],
             cross_platform_groups=[],
+            content_file_paths=[],
+            report_content="",
+            report_file_path="",
             errors=[],
         )
 
@@ -295,3 +305,6 @@ async def run_scan(scan_run_id: str, request: ScanRequest, db: AsyncSession, red
                 scan_run.completed_at = datetime.now(timezone.utc)
                 scan_run.duration_ms = int((time.time() - start_time) * 1000)
                 await error_db.commit()
+    finally:
+        if redis is not None:
+            await redis.aclose()

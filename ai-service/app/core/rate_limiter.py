@@ -10,11 +10,7 @@ logger = structlog.get_logger()
 # Platform rate limits: (max_requests, window_seconds)
 PLATFORM_LIMITS: dict[str, tuple[int, int]] = {
     "youtube": (10_000, 86400),      # 10k quota units / 24h
-    "tiktok": (500, 86400),          # RapidAPI plan dependent
-    "twitter": (500, 86400),         # RapidAPI plan dependent
-    "instagram": (500, 86400),       # RapidAPI plan dependent
-    "google_trends": (12, 60),       # ~12 requests / 60s
-    "firecrawl": (500, 86400),       # Firecrawl plan dependent
+    "google_news": (60, 60),         # ~60 requests / 60s (news article fetching)
 }
 
 

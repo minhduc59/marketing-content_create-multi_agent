@@ -27,5 +27,12 @@ class TrendScanState(TypedDict):
     analyzed_trends: list[dict]
     cross_platform_groups: list[dict]
 
+    # Content saver output
+    content_file_paths: list[str]
+
+    # Reporter output
+    report_content: str
+    report_file_path: str
+
     # Control
     errors: Annotated[list[ScanError], operator.add]

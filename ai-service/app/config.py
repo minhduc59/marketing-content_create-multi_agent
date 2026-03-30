@@ -18,11 +18,17 @@ class Settings(BaseSettings):
     # YouTube Data API v3
     YOUTUBE_API_KEY: str = ""
 
-    # RapidAPI
-    RAPIDAPI_KEY: str = ""
+    # Google News Crawling
+    GOOGLE_NEWS_MAX_KEYWORDS: int = 10
+    GOOGLE_NEWS_ARTICLES_PER_KEYWORD: int = 5
+    GOOGLE_NEWS_PERIOD_DAYS: int = 7
 
-    # Firecrawl
-    FIRECRAWL_API_KEY: str = ""
+    # Google News Topic Crawling
+    GOOGLE_NEWS_DEFAULT_TOPICS: list[str] = [
+        "TECHNOLOGY", "BUSINESS", "SCIENCE", "HEALTH", "ENTERTAINMENT",
+    ]
+    GOOGLE_NEWS_TOPIC_ARTICLES_PER_TOPIC: int = 5
+    GOOGLE_NEWS_TOPIC_PERIOD_DAYS: int = 7
 
     # App
     APP_ENV: str = "development"

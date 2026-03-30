@@ -35,7 +35,7 @@ class TrendItem(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    platform: Mapped[Platform] = mapped_column(Enum(Platform))
+    platform: Mapped[Platform] = mapped_column(Enum(Platform, values_callable=lambda e: [m.value for m in e]))
 
     # Tags
     tags: Mapped[list] = mapped_column(JSON, default=list)

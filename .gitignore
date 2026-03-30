@@ -22,3 +22,7 @@ node_modules/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated reports
+ai-service/reports/
+ai-service/content/

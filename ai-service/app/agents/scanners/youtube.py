@@ -11,4 +11,6 @@ class YouTubeScannerNode(BaseScannerNode):
 
     async def fetch(self, options: dict) -> list[dict]:
         region = options.get("region", "US")
+        if region == "global" or len(region) != 2:
+            region = "US"
         return await self.tool.fetch_all(region_code=region)

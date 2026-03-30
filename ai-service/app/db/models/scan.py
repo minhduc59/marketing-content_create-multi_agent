@@ -31,6 +31,7 @@ class ScanRun(Base):
     )
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str | None] = mapped_column(String, nullable=True)
+    report_file_path: Mapped[str | None] = mapped_column(String, nullable=True)
 
     trend_items: Mapped[list["TrendItem"]] = relationship(
         back_populates="scan_run", cascade="all, delete-orphan"

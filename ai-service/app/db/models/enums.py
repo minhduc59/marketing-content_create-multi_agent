@@ -11,10 +11,8 @@ class ScanStatus(str, enum.Enum):
 
 class Platform(str, enum.Enum):
     YOUTUBE = "youtube"
-    TIKTOK = "tiktok"
-    TWITTER = "twitter"
-    INSTAGRAM = "instagram"
-    GOOGLE_TRENDS = "google_trends"
+    GOOGLE_NEWS = "google_news"
+    GOOGLE_NEWS_TOPIC = "google_news_topic"
 
 
 class Sentiment(str, enum.Enum):

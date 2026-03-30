@@ -18,16 +18,32 @@ from app.dependencies import get_session
 router = APIRouter()
 
 
-@router.get("", response_model=TrendListResponse)
+@router.get(
+    "",
+    response_model=TrendListResponse,
+    summary="List trends",
+    description=(
+        "Returns a paginated list of analyzed trends with optional filters.\n\n"
+        "**Filter params:**\n"
+        "- `platform` — `youtube` | `google_news`\n"
+        "- `category` — `tech` | `fashion` | `food` | `beauty` | `fitness` | `business` | "
+        "`entertainment` | `gaming` | `education` | `health` | `travel` | `sports` | `music` | "
+        "`politics` | `lifestyle` | `other`\n"
+        "- `sentiment` — `positive` | `negative` | `neutral` | `mixed`\n"
+        "- `lifecycle` — `rising` | `peak` | `declining`\n"
+        "- `min_score` — minimum relevance score (0–10)\n\n"
+        "**Sort:** `relevance_score` (default) | `views` | `discovered_at`"
+    ),
+)
 async def list_trends(
     platform: Platform | None = None,
     category: str | None = None,
     sentiment: Sentiment | None = None,
     lifecycle: TrendLifecycle | None = None,
-    min_score: float | None = Query(default=None, ge=0, le=10),
-    sort_by: str = Query(default="relevance_score", pattern="^(relevance_score|views|discovered_at)$"),
-    page: int = Query(default=1, ge=1),
-    limit: int = Query(default=20, ge=1, le=100),
+    min_score: float | None = Query(default=None, ge=0, le=10, description="Minimum relevance score (0–10)"),
+    sort_by: str = Query(default="relevance_score", pattern="^(relevance_score|views|discovered_at)$", description="Field to sort by"),
+    page: int = Query(default=1, ge=1, description="Page number"),
+    limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_session),
 ):
     query = select(TrendItem)
@@ -65,10 +81,18 @@ async def list_trends(
     )
 
 
-@router.get("/top", response_model=list[TrendSummary])
+@router.get(
+    "/top",
+    response_model=list[TrendSummary],
+    summary="Top trends by timeframe",
+    description=(
+        "Returns the highest-scoring trends within a time window, ordered by relevance score.\n\n"
+        "**Timeframe:** `24h` (default) | `7d` | `30d`"
+    ),
+)
 async def get_top_trends(
-    limit: int = Query(default=20, ge=1, le=100),
-    timeframe: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    limit: int = Query(default=20, ge=1, le=100, description="Max results to return"),
+    timeframe: str = Query(default="24h", pattern="^(24h|7d|30d)$", description="Time window: 24h, 7d, or 30d"),
     db: AsyncSession = Depends(get_session),
 ):
     hours_map = {"24h": 24, "7d": 168, "30d": 720}
@@ -86,7 +110,23 @@ async def get_top_trends(
     return [TrendSummary.model_validate(item) for item in items]
 
 
-@router.get("/{trend_id}", response_model=TrendDetail)
+@router.get(
+    "/{trend_id}",
+    response_model=TrendDetail,
+    summary="Get trend detail",
+    description=(
+        "Returns full detail for a single trend item including:\n"
+        "- Content body, video/image URLs\n"
+        "- Author info and engagement metrics\n"
+        "- AI-generated category, sentiment, lifecycle, related topics\n"
+        "- Top comments (if collected)\n"
+        "- Raw platform data"
+    ),
+    responses={
+        200: {"description": "Trend detail"},
+        404: {"description": "Trend not found"},
+    },
+)
 async def get_trend_detail(
     trend_id: uuid.UUID,
     db: AsyncSession = Depends(get_session),
