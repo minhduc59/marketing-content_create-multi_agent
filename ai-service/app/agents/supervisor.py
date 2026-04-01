@@ -4,88 +4,52 @@ from datetime import datetime, timezone
 
 import redis.asyncio as aioredis
 import structlog
-from langgraph.types import Send
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
 
-from app.agents.analyzer import analyzer_node
 from app.agents.content_saver import content_saver_node
-from app.agents.reporter import reporter_node
-from app.agents.scanners.google_news import GoogleNewsScannerNode
-from app.agents.scanners.google_news_topic import GoogleNewsTopicScannerNode
-from app.agents.scanners.youtube import YouTubeScannerNode
+from app.agents.scanners.hackernews import HackerNewsScannerNode
 from app.agents.state import TrendScanState
+from app.agents.trend_analyzer import trend_analyzer_node
 from app.api.v1.schemas.scan import ScanRequest
 from app.config import get_settings
-from app.core.cache import Cache
 from app.core.rate_limiter import RateLimiter
 from app.db.models import ScanRun, ScanStatus, TrendComment, TrendItem
 from app.db.session import async_session_factory
 
 logger = structlog.get_logger()
 
-# Scanner node name -> platform mapping
-SCANNER_MAP = {
-    "youtube": "youtube_scanner",
-    "google_news": "google_news_scanner",
-    "google_news_topic": "google_news_topic_scanner",
-}
 
+def build_trend_scan_graph(rate_limiter: RateLimiter) -> StateGraph:
+    """Build and compile the LangGraph trend scanning graph.
 
-def build_trend_scan_graph(rate_limiter: RateLimiter, cache: Cache) -> StateGraph:
-    """Build and compile the LangGraph trend scanning graph."""
-
-    # Create scanner node instances
-    youtube_node = YouTubeScannerNode(rate_limiter, cache)
-    google_news_node = GoogleNewsScannerNode(rate_limiter, cache)
-    google_news_topic_node = GoogleNewsTopicScannerNode(rate_limiter, cache)
+    Pipeline: hackernews_scanner → collect_results → trend_analyzer → content_saver → persist_results
+    Combined trend_analyzer merges analysis + report generation into a single LLM pass.
+    """
+    hackernews_node = HackerNewsScannerNode(rate_limiter)
 
     graph = StateGraph(TrendScanState)
 
-    # Add scanner nodes
-    graph.add_node("youtube_scanner", youtube_node)
-    graph.add_node("google_news_scanner", google_news_node)
-    graph.add_node("google_news_topic_scanner", google_news_topic_node)
-
-    # Add post-scan nodes
+    # Add nodes
+    graph.add_node("hackernews_scanner", hackernews_node)
     graph.add_node("collect_results", collect_results_node)
-    graph.add_node("analyzer", analyzer_node)
+    graph.add_node("trend_analyzer", trend_analyzer_node)
     graph.add_node("content_saver", content_saver_node)
-    graph.add_node("reporter", reporter_node)
     graph.add_node("persist_results", persist_results_node)
 
-    # Fan-out: START routes to requested scanner nodes in parallel
-    def route_to_scanners(state: TrendScanState) -> list[Send]:
-        platforms = state.get("platforms", [])
-        sends = []
-        for platform in platforms:
-            node_name = SCANNER_MAP.get(platform)
-            if node_name:
-                sends.append(Send(node_name, state))
-            else:
-                logger.warning("Unknown platform requested", platform=platform)
-        if not sends:
-            logger.warning("No valid platforms requested, skipping scan")
-        return sends
-
-    graph.add_conditional_edges(START, route_to_scanners)
-
-    # Fan-in: all scanners converge to collect_results
-    for node_name in SCANNER_MAP.values():
-        graph.add_edge(node_name, "collect_results")
-
-    # Sequential: collect -> analyze -> save content -> report -> persist
-    graph.add_edge("collect_results", "analyzer")
-    graph.add_edge("analyzer", "content_saver")
-    graph.add_edge("content_saver", "reporter")
-    graph.add_edge("reporter", "persist_results")
+    # Linear pipeline: START → hackernews → collect → trend_analyzer → save → persist → END
+    graph.add_edge(START, "hackernews_scanner")
+    graph.add_edge("hackernews_scanner", "collect_results")
+    graph.add_edge("collect_results", "trend_analyzer")
+    graph.add_edge("trend_analyzer", "content_saver")
+    graph.add_edge("content_saver", "persist_results")
     graph.add_edge("persist_results", END)
 
     return graph.compile()
 
 
 async def collect_results_node(state: TrendScanState) -> dict:
-    """Merge and validate results from all scanners."""
+    """Merge and validate results from the scanner."""
     raw_results = state.get("raw_results", [])
 
     total_items = 0
@@ -106,7 +70,6 @@ async def collect_results_node(state: TrendScanState) -> dict:
         platforms_failed=list(platforms_failed.keys()),
     )
 
-    # State passes through; analyzer will read raw_results
     return {}
 
 
@@ -166,7 +129,7 @@ async def persist_results_node(state: TrendScanState) -> dict:
                     description=(item.get("description") or "")[:5000],
                     content_body=item.get("content_body"),
                     source_url=item.get("source_url"),
-                    platform=item.get("_platform", item.get("platform", "youtube")).lower(),
+                    platform=item.get("_platform", "hackernews").lower(),
                     tags=item.get("tags", []),
                     hashtags=item.get("hashtags", []),
                     views=item.get("views"),
@@ -184,7 +147,14 @@ async def persist_results_node(state: TrendScanState) -> dict:
                     sentiment=item.get("sentiment"),
                     lifecycle=item.get("lifecycle"),
                     relevance_score=item.get("relevance_score"),
+                    quality_score=item.get("quality_score"),
                     related_topics=item.get("related_topics", []),
+                    engagement_prediction=item.get("engagement_prediction"),
+                    source_type=item.get("source_type"),
+                    linkedin_angles=item.get("linkedin_angles", []),
+                    key_data_points=item.get("key_data_points", []),
+                    target_audience=item.get("target_audience", []),
+                    cleaned_content=item.get("cleaned_content"),
                     dedup_key=item.get("dedup_key"),
                     cross_platform_ids=item.get("cross_platform_ids", []),
                     raw_data=item.get("raw_data"),
@@ -203,7 +173,6 @@ async def persist_results_node(state: TrendScanState) -> dict:
         except Exception as e:
             await db.rollback()
             logger.error("persist_results: failed", error=str(e))
-            # Update scan run as failed
             try:
                 scan_run = (
                     await db.execute(
@@ -236,7 +205,7 @@ def _parse_datetime(value) -> datetime | None:
 
 
 async def run_scan(scan_run_id: str, request: ScanRequest):
-    """Execute the full trend scan pipeline."""
+    """Execute the full trend scan pipeline (HackerNews → Technology domain)."""
     start_time = time.time()
     settings = get_settings()
     redis = None
@@ -256,23 +225,35 @@ async def run_scan(scan_run_id: str, request: ScanRequest):
         # Build and run the graph
         redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
         rate_limiter = RateLimiter(redis)
-        cache = Cache(redis)
-        graph = build_trend_scan_graph(rate_limiter, cache)
+        graph = build_trend_scan_graph(rate_limiter)
 
         initial_state = TrendScanState(
             scan_run_id=scan_run_id,
-            platforms=[p.value for p in request.platforms],
+            platforms=["hackernews"],
             options={
                 "max_items_per_platform": request.options.max_items_per_platform,
                 "include_comments": request.options.include_comments,
-                "region": request.options.region,
-                "topics": request.options.topics,
+                "quality_threshold": getattr(request.options, "quality_threshold", 5),
+                "keywords": getattr(request.options, "keywords", None)
+                or [
+                    "Artificial Intelligence & Machine Learning",
+                    "Software Engineering & Developer Tools",
+                    "Cloud Computing & Infrastructure",
+                    "Cybersecurity & Privacy",
+                    "Open Source Projects",
+                    "Startups & Tech Industry",
+                    "Hardware & Semiconductors",
+                    "Programming Languages & Frameworks",
+                    "Data Science & Analytics",
+                    "Robotics & Automation",
+                ],
             },
             raw_results=[],
             analyzed_trends=[],
-            cross_platform_groups=[],
+            discarded_articles=[],
+            trend_report_md="",
+            analysis_meta={},
             content_file_paths=[],
-            report_content="",
             report_file_path="",
             errors=[],
         )

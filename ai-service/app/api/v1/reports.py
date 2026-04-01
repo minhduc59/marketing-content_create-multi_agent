@@ -1,7 +1,6 @@
 import asyncio
 import json
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, select
@@ -13,17 +12,11 @@ from app.api.v1.schemas.report import (
     ReportListResponse,
     ReportSummaryResponse,
 )
+from app.core.storage import get_storage
 from app.db.models import ScanRun, ScanStatus
 from app.dependencies import get_session
 
 router = APIRouter()
-
-BASE_DIR = Path(__file__).resolve().parent.parent.parent  # ai-service/
-
-
-def _resolve_report_path(relative_path: str) -> Path:
-    """Resolve a relative report path to an absolute path."""
-    return BASE_DIR / relative_path
 
 
 @router.get(
@@ -44,12 +37,10 @@ async def list_reports(
         .order_by(desc(ScanRun.completed_at))
     )
 
-    # Count
     from sqlalchemy import func
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar() or 0
 
-    # Paginate
     query = query.offset((page - 1) * limit).limit(limit)
     result = await db.execute(query)
     scan_runs = result.scalars().all()
@@ -87,11 +78,13 @@ async def get_report(
     if not scan_run or not scan_run.report_file_path:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    report_path = _resolve_report_path(scan_run.report_file_path)
-    if not report_path.exists():
-        raise HTTPException(status_code=404, detail="Report file not found on disk")
+    storage = get_storage()
+    report_key = scan_run.report_file_path
 
-    content = await asyncio.to_thread(report_path.read_text, "utf-8")
+    if not await asyncio.to_thread(storage.exists, report_key):
+        raise HTTPException(status_code=404, detail="Report file not found in storage")
+
+    content = await asyncio.to_thread(storage.read_text, report_key)
 
     return ReportContentResponse(
         scan_run_id=scan_run.id,
@@ -105,7 +98,7 @@ async def get_report(
     "/{scan_run_id}/summary",
     response_model=ReportSummaryResponse,
     summary="Get report summary",
-    description="Returns a structured JSON summary with trend rankings and content angle suggestions.",
+    description="Returns a structured JSON summary with processed articles, discarded articles, and analysis meta.",
     responses={404: {"description": "Report not found"}},
 )
 async def get_report_summary(
@@ -120,15 +113,13 @@ async def get_report_summary(
     if not scan_run or not scan_run.report_file_path:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # Derive summary JSON path from report path
-    summary_path = _resolve_report_path(
-        scan_run.report_file_path.replace("_report.md", "_summary.json")
-    )
+    storage = get_storage()
+    summary_key = scan_run.report_file_path.replace("_report.md", "_summary.json")
 
-    if not summary_path.exists():
+    if not await asyncio.to_thread(storage.exists, summary_key):
         raise HTTPException(status_code=404, detail="Report summary file not found")
 
-    raw = await asyncio.to_thread(summary_path.read_text, "utf-8")
+    raw = await asyncio.to_thread(storage.read_text, summary_key)
     summary_data = json.loads(raw)
 
     return ReportSummaryResponse(**summary_data)

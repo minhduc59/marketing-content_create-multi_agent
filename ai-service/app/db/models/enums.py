@@ -10,19 +10,34 @@ class ScanStatus(str, enum.Enum):
 
 
 class Platform(str, enum.Enum):
-    YOUTUBE = "youtube"
-    GOOGLE_NEWS = "google_news"
-    GOOGLE_NEWS_TOPIC = "google_news_topic"
+    HACKERNEWS = "hackernews"
 
 
 class Sentiment(str, enum.Enum):
-    POSITIVE = "positive"
-    NEGATIVE = "negative"
+    BULLISH = "bullish"
     NEUTRAL = "neutral"
-    MIXED = "mixed"
+    BEARISH = "bearish"
+    CONTROVERSIAL = "controversial"
 
 
 class TrendLifecycle(str, enum.Enum):
+    EMERGING = "emerging"
     RISING = "rising"
-    PEAK = "peak"
+    PEAKING = "peaking"
+    SATURATED = "saturated"
     DECLINING = "declining"
+
+
+class EngagementPrediction(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    VIRAL = "viral"
+
+
+class SourceType(str, enum.Enum):
+    OFFICIAL_BLOG = "official_blog"
+    NEWS = "news"
+    RESEARCH = "research"
+    COMMUNITY = "community"
+    SOCIAL = "social"

@@ -18,14 +18,13 @@ router = APIRouter()
     response_model=ScanResponse,
     summary="Trigger a trend scan",
     description=(
-        "Start an async trend scan across one or more platforms. "
+        "Start an async HackerNews technology trend scan. "
         "Returns immediately with a `scan_id` and `pending` status. "
         "Poll `GET /api/v1/scan/{scan_id}/status` to track progress.\n\n"
-        "**Platforms:** `youtube`, `google_news`\n\n"
+        "**Platform:** `hackernews`\n\n"
         "**Options:**\n"
-        "- `max_items_per_platform` — 1–200 items per platform (default 50)\n"
-        "- `include_comments` — fetch top comments for each item (default true)\n"
-        "- `region` — ISO region code, e.g. `US`, `VN`, `global` (default `global`)"
+        "- `max_items_per_platform` — 1–200 items to fetch (default 50)\n"
+        "- `include_comments` — fetch top comments for each item (default true)"
     ),
     responses={
         202: {"description": "Scan accepted and queued"},

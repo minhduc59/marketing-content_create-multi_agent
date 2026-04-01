@@ -17,7 +17,13 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.db.models.enums import Platform, Sentiment, TrendLifecycle
+from app.db.models.enums import (
+    EngagementPrediction,
+    Platform,
+    Sentiment,
+    SourceType,
+    TrendLifecycle,
+)
 
 
 class TrendItem(Base):
@@ -58,14 +64,31 @@ class TrendItem(Base):
     author_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     author_followers: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # AI analysis (populated by AnalyzerAgent)
+    # AI analysis (populated by TrendAnalyzer)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    sentiment: Mapped[Sentiment | None] = mapped_column(Enum(Sentiment), nullable=True)
+    sentiment: Mapped[Sentiment | None] = mapped_column(
+        Enum(Sentiment, values_callable=lambda e: [m.value for m in e]), nullable=True
+    )
     lifecycle: Mapped[TrendLifecycle | None] = mapped_column(
-        Enum(TrendLifecycle), nullable=True
+        Enum(TrendLifecycle, values_callable=lambda e: [m.value for m in e]), nullable=True
     )
     relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     related_topics: Mapped[list] = mapped_column(JSON, default=list)
+
+    # Enhanced analysis fields
+    engagement_prediction: Mapped[EngagementPrediction | None] = mapped_column(
+        Enum(EngagementPrediction, values_callable=lambda e: [m.value for m in e]),
+        nullable=True,
+    )
+    source_type: Mapped[SourceType | None] = mapped_column(
+        Enum(SourceType, values_callable=lambda e: [m.value for m in e]),
+        nullable=True,
+    )
+    linkedin_angles: Mapped[list] = mapped_column(JSON, default=list)
+    key_data_points: Mapped[list] = mapped_column(JSON, default=list)
+    target_audience: Mapped[list] = mapped_column(JSON, default=list)
+    cleaned_content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Cross-platform dedup
     dedup_key: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)

@@ -1,164 +1,149 @@
+"""Save analyzed articles as individual markdown files.
+
+Output location: reports/{scan_run_id}/articles/{slug}.md
+- Development: local filesystem (ai-service/reports/...)
+- Production: S3 bucket
+"""
+
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 
 import structlog
 
 from app.agents.state import TrendScanState
+from app.core.storage import get_storage
 
 logger = structlog.get_logger()
-
-BASE_DIR = Path(__file__).resolve().parent.parent.parent  # ai-service/
-CONTENT_DIR = BASE_DIR / "content"
-TRENDING_DIR = CONTENT_DIR / "trending"
-LATEST_DIR = CONTENT_DIR / "latest"
 
 
 def _slugify(text: str, max_length: int = 80) -> str:
     """Convert text to a filesystem-safe slug."""
-    # Lowercase and replace non-alphanumeric chars with hyphens
     slug = re.sub(r"[^\w\s-]", "", text.lower())
     slug = re.sub(r"[\s_]+", "-", slug).strip("-")
-    # Truncate to max_length
     if len(slug) > max_length:
         slug = slug[:max_length].rstrip("-")
     return slug or "untitled"
 
 
-def _build_markdown(item: dict, crawled_at: str, platform: str = "google_news") -> str:
-    """Build markdown content with YAML frontmatter for a news article."""
+def _build_article_markdown(item: dict, index: int) -> str:
+    """Build markdown for a single analyzed article with YAML frontmatter."""
+    raw = item.get("raw_data", {})
     title = item.get("title", "Untitled")
     source_url = item.get("source_url", "")
-    author = item.get("author_name", "")
+    quality_score = item.get("quality_score", 0)
+    sentiment = item.get("sentiment", "neutral")
+    lifecycle = item.get("lifecycle", "rising")
+    engagement = item.get("engagement_prediction", "medium")
+    source_type = item.get("source_type", "community")
+    category = item.get("category", "tech")
+    hn_score = raw.get("hn_score", 0)
+    hn_comments = raw.get("hn_comments", 0)
+    hn_url = raw.get("hn_url", "")
+    author = item.get("author_name", raw.get("hn_author", ""))
     published_at = item.get("published_at", "")
-    category = item.get("category", "")
-    sentiment = item.get("sentiment", "")
-    relevance_score = item.get("relevance_score", 0)
-    tags = item.get("tags", [])
-    related_topics = item.get("related_topics", [])
-    raw_data = item.get("raw_data", {})
-    trending_keyword = raw_data.get("trending_keyword", "")
-    topic = raw_data.get("topic", "")
+    cleaned_content = item.get("cleaned_content", "")
+    key_data_points = item.get("key_data_points", [])
+    target_audience = item.get("target_audience", [])
+    linkedin_angles = item.get("linkedin_angles", [])
 
-    description = item.get("description", "")
-    content_body = item.get("content_body", "")
-    summary = raw_data.get("summary", "") or description
-
-    # YAML frontmatter
-    tags_str = ", ".join(f'"{t}"' for t in tags) if tags else ""
     lines = [
         "---",
-        f'title: "{title}"',
+        f'title: "{_escape_yaml(title)}"',
         f'source_url: "{source_url}"',
-        f'author: "{author}"',
-        f'published_at: "{published_at}"',
-        f'crawled_at: "{crawled_at}"',
-        f'platform: "{platform}"',
-    ]
-    if topic:
-        lines.append(f'topic: "{topic}"')
-    if trending_keyword:
-        lines.append(f'trending_keyword: "{trending_keyword}"')
-    lines.extend([
-        f'category: "{category}"',
+        f'source_type: "{source_type}"',
+        f"quality_score: {quality_score}",
         f'sentiment: "{sentiment}"',
-        f"relevance_score: {relevance_score}",
-        f"tags: [{tags_str}]",
+        f'lifecycle: "{lifecycle}"',
+        f'engagement_prediction: "{engagement}"',
+        f'category: "{category}"',
+        f"hn_score: {hn_score}",
+        f"hn_comments: {hn_comments}",
+        f'hn_url: "{hn_url}"',
+        f'author: "{_escape_yaml(author)}"',
+        f'published_at: "{published_at}"',
+        f"target_audience: {target_audience}",
         "---",
         "",
         f"# {title}",
         "",
-    ])
+    ]
 
-    if summary:
-        lines.extend(["## Summary", "", summary, ""])
-
-    if content_body:
-        lines.extend(["## Full Content", "", content_body, ""])
-
-    if related_topics:
-        lines.append("## Related Topics")
-        lines.append("")
-        for topic in related_topics:
-            lines.append(f"- {topic}")
+    # Key data points
+    if key_data_points:
+        lines.append("## Key Data Points")
+        for dp in key_data_points:
+            lines.append(f"- {dp}")
         lines.append("")
 
+    # LinkedIn angles
+    if linkedin_angles:
+        lines.append("## LinkedIn Content Angles")
+        for i, angle in enumerate(linkedin_angles, 1):
+            fmt = angle.get("format", "thought_leadership")
+            hook = angle.get("angle", "")
+            hook_line = angle.get("hook_line", "")
+            lines.append(f"### Angle {i}: {fmt}")
+            lines.append(f"- **Hook:** {hook}")
+            lines.append(f"- **Opening line:** \"{hook_line}\"")
+            lines.append("")
+
+    # Cleaned content
+    if cleaned_content:
+        lines.append("## Article Content")
+        lines.append("")
+        lines.append(cleaned_content)
+        lines.append("")
+
+    # Source links
+    lines.append("---")
     if source_url:
-        lines.extend(["## Source", "", f"[Read original article]({source_url})", ""])
+        lines.append(f"[Original Article]({source_url})")
+    if hn_url:
+        lines.append(f" | [HN Discussion]({hn_url})")
+    lines.append("")
 
     return "\n".join(lines)
 
 
-async def content_saver_node(state: TrendScanState) -> dict:
-    """Save analyzed news articles as individual markdown files.
+def _escape_yaml(text: str) -> str:
+    """Escape quotes in YAML string values."""
+    return text.replace('"', '\\"').replace("\n", " ").strip()
 
-    - google_news (trending) items → content/trending/
-    - google_news_topic items → content/latest/
+
+async def content_saver_node(state: TrendScanState) -> dict:
+    """Save analyzed articles as individual markdown files to reports/{scan_id}/articles/.
+
+    Uses local filesystem in development, S3 in production.
     """
     analyzed = state.get("analyzed_trends", [])
+    scan_run_id = state.get("scan_run_id", "unknown")
 
-    # Separate items by platform
-    trending_items = [
-        item for item in analyzed
-        if item.get("_platform") == "google_news"
-    ]
-    topic_items = [
-        item for item in analyzed
-        if item.get("_platform") == "google_news_topic"
-    ]
-
-    if not trending_items and not topic_items:
-        logger.info("ContentSaver: no news items to save")
+    if not analyzed:
+        logger.info("ContentSaver: no analyzed articles to save")
         return {"content_file_paths": []}
 
+    storage = get_storage()
     now = datetime.now(timezone.utc)
-    crawled_at = now.isoformat()
-    time_suffix = now.strftime("%Y%m%d_%H%M%S")
-
+    date_str = now.strftime("%Y-%m-%d")
     saved_paths = []
 
-    # Save trending news → content/trending/
-    if trending_items:
-        TRENDING_DIR.mkdir(parents=True, exist_ok=True)
-        for item in trending_items:
-            saved = _save_item(item, TRENDING_DIR, time_suffix, crawled_at, "google_news")
-            if saved:
-                saved_paths.append(saved)
-        logger.info("ContentSaver: trending saved", count=len([p for p in saved_paths]))
+    for i, item in enumerate(analyzed):
+        title = item.get("title", "untitled")
+        slug = _slugify(title)
+        key = f"reports/{scan_run_id}/articles/{date_str}_{slug}.md"
 
-    # Save topic news → content/latest/
-    if topic_items:
-        LATEST_DIR.mkdir(parents=True, exist_ok=True)
-        before = len(saved_paths)
-        for item in topic_items:
-            saved = _save_item(item, LATEST_DIR, time_suffix, crawled_at, "google_news_topic")
-            if saved:
-                saved_paths.append(saved)
-        logger.info("ContentSaver: latest saved", count=len(saved_paths) - before)
+        try:
+            markdown = _build_article_markdown(item, i)
+            path = storage.write_text(key, markdown, content_type="text/markdown")
+            saved_paths.append(path)
+            logger.debug("ContentSaver: saved", file=key)
+        except Exception as e:
+            logger.warning("ContentSaver: failed to save", file=key, error=str(e))
 
     logger.info(
         "ContentSaver: completed",
         saved=len(saved_paths),
-        trending=len(trending_items),
-        topic=len(topic_items),
+        total=len(analyzed),
+        scan_run_id=scan_run_id,
     )
     return {"content_file_paths": saved_paths}
-
-
-def _save_item(
-    item: dict, target_dir: Path, time_suffix: str, crawled_at: str, platform: str
-) -> str | None:
-    """Save a single item as a markdown file. Returns relative path or None."""
-    title = item.get("title", "untitled")
-    slug = _slugify(title)
-    filename = f"{slug}-{time_suffix}.md"
-    filepath = target_dir / filename
-
-    try:
-        markdown = _build_markdown(item, crawled_at, platform)
-        filepath.write_text(markdown, encoding="utf-8")
-        logger.debug("ContentSaver: saved", file=filename, dir=target_dir.name)
-        return str(filepath.relative_to(BASE_DIR))
-    except Exception as e:
-        logger.warning("ContentSaver: failed to save", file=filename, error=str(e))
-        return None

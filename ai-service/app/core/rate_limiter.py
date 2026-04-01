@@ -9,8 +9,7 @@ logger = structlog.get_logger()
 
 # Platform rate limits: (max_requests, window_seconds)
 PLATFORM_LIMITS: dict[str, tuple[int, int]] = {
-    "youtube": (10_000, 86400),      # 10k quota units / 24h
-    "google_news": (60, 60),         # ~60 requests / 60s (news article fetching)
+    "hackernews": (30, 60),          # HN Firebase API: ~30 req/min to be polite
 }
 
 

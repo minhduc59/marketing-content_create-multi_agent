@@ -15,24 +15,18 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str = ""
 
-    # YouTube Data API v3
-    YOUTUBE_API_KEY: str = ""
-
-    # Google News Crawling
-    GOOGLE_NEWS_MAX_KEYWORDS: int = 10
-    GOOGLE_NEWS_ARTICLES_PER_KEYWORD: int = 5
-    GOOGLE_NEWS_PERIOD_DAYS: int = 7
-
-    # Google News Topic Crawling
-    GOOGLE_NEWS_DEFAULT_TOPICS: list[str] = [
-        "TECHNOLOGY", "BUSINESS", "SCIENCE", "HEALTH", "ENTERTAINMENT",
-    ]
-    GOOGLE_NEWS_TOPIC_ARTICLES_PER_TOPIC: int = 5
-    GOOGLE_NEWS_TOPIC_PERIOD_DAYS: int = 7
-
     # App
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
+
+    # S3 (production storage)
+    S3_BUCKET: str = ""
+    S3_REGION: str = "ap-southeast-1"
+    S3_PREFIX: str = "trending-scanner"
+
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV == "production"
 
     @property
     def sync_database_url(self) -> str:

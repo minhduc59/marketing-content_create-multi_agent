@@ -1,7 +1,7 @@
 [project]
 name = "trending-scanner"
-version = "0.1.0"
-description = "AI-powered trending content scanner agent"
+version = "0.2.0"
+description = "AI-powered HackerNews technology trend scanner for LinkedIn content"
 requires-python = ">=3.11"
 dependencies = [
     # Web framework
@@ -24,20 +24,16 @@ dependencies = [
     # Redis
     "redis[hiredis]>=5.2.0",
 
-    # Data sources
-    "google-api-python-client>=2.150.0",
+    # HTTP client (for HackerNews API)
     "httpx>=0.28.0",
-
-    # MCP
-    "mcp[cli]>=1.0.0",
-
-    # Google News
-    "google-news-trends-mcp>=0.2.7",
 
     # Utilities
     "tenacity>=9.0.0",
     "structlog>=24.4.0",
     "apscheduler>=3.10.0",
+
+    # Cloud storage (S3 for production)
+    "boto3>=1.35.0",
 ]
 
 [project.optional-dependencies]

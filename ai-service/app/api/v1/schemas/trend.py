@@ -3,7 +3,19 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.db.models.enums import Platform, Sentiment, TrendLifecycle
+from app.db.models.enums import (
+    EngagementPrediction,
+    Platform,
+    Sentiment,
+    SourceType,
+    TrendLifecycle,
+)
+
+
+class LinkedInAngle(BaseModel):
+    angle: str
+    format: str
+    hook_line: str
 
 
 class TrendCommentResponse(BaseModel):
@@ -28,6 +40,8 @@ class TrendSummary(BaseModel):
     sentiment: Sentiment | None = None
     lifecycle: TrendLifecycle | None = None
     relevance_score: float | None = None
+    quality_score: float | None = None
+    engagement_prediction: EngagementPrediction | None = None
     views: int | None = None
     likes: int | None = None
     hashtags: list[str] = []
@@ -38,6 +52,7 @@ class TrendSummary(BaseModel):
 
 class TrendDetail(TrendSummary):
     content_body: str | None = None
+    cleaned_content: str | None = None
     video_url: str | None = None
     image_urls: list[str] = []
     tags: list[str] = []
@@ -47,7 +62,11 @@ class TrendDetail(TrendSummary):
     author_name: str | None = None
     author_url: str | None = None
     author_followers: int | None = None
+    source_type: SourceType | None = None
     related_topics: list[str] = []
+    linkedin_angles: list[LinkedInAngle] = []
+    key_data_points: list[str] = []
+    target_audience: list[str] = []
     cross_platform_ids: list[str] = []
     comments: list[TrendCommentResponse] = []
     raw_data: dict | None = None
