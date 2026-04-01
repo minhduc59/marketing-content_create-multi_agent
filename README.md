@@ -1,106 +1,74 @@
-# Marketing Content AI Agent - Multi-Agent System
+# Marketing Content AI Agent — LinkedIn Technology Content Pipeline
 
-A fully automated multi-agent AI system that handles the entire content marketing pipeline end-to-end: trend discovery, content generation, media creation, scheduling, publishing, and analytics.
+An AI-powered system that crawls trending technology content from Hacker News, analyzes it, and generates LinkedIn content recommendations for technology professionals.
 
 ## Problem
 
-Small-to-medium businesses (SMBs) and content creators waste 3-5 hours daily on:
-- Searching for trending topics manually
-- Writing captions, hashtags, and scripts
-- Creating media assets
-- Scheduling and publishing posts
-- Analyzing performance metrics
+Technology professionals and content creators spend hours:
+- Searching for trending tech topics manually
+- Writing LinkedIn posts and articles
+- Keeping up with industry developments
+- Creating thought leadership content
 
 ## Solution
 
-A 7-stage AI pipeline powered by LangGraph's Supervisor Pattern with human-in-the-loop checkpoints:
+A LangGraph-powered pipeline that automates technology trend discovery and LinkedIn content generation:
 
 ```
-User Request → Supervisor Agent (LangGraph)
-  1. Trend Discovery   → Google Trends, Reddit, YouTube, TikTok, Twitter/X, Instagram
-  2. Analysis           → Claude LLM: sentiment, lifecycle, categorization
-  3. Content Generation → Captions, hashtags, scripts (3 styles)
-  4. Media Creation     → DALL-E 3 image generation with caching
-  5. Scheduling         → Golden hours analysis + BullMQ delayed jobs
-  6. Publishing         → Facebook/Instagram Graph APIs
-  7. Analytics          → Performance metrics + strategy feedback loop
+HackerNews Crawler → Trend Analysis (GPT-4o) → Content Saver → LinkedIn Report Generator
 ```
 
-Human-in-the-loop checkpoints at stages 3 (content review) and 4 (media approval).
+**Data source:** Hacker News (top stories, full article crawling, tech filtering)
+**Target platform:** LinkedIn (thought leadership, industry insights, professional development)
+**Domain focus:** Technology
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | Next.js 15 (App Router), shadcn/ui, Tailwind CSS, TanStack Query, Zustand, recharts |
-| **Backend API** | NestJS 10.x, Prisma 5.x, BullMQ + Redis, JWT + Passport.js |
-| **AI Service** | FastAPI 0.115.x, LangGraph 0.2.x, Claude Sonnet, DALL-E 3 |
-| **Database** | PostgreSQL 16.x |
-| **Cache/Queue** | Redis 7.x |
-| **Storage** | Cloudflare R2 / AWS S3 |
-| **Infrastructure** | Docker + Docker Compose, GitHub Actions |
+| **AI Service** | FastAPI, LangGraph, GPT-4o |
+| **Database** | PostgreSQL 16, SQLAlchemy 2.0 (async) |
+| **Cache/Queue** | Redis 7 |
+| **Infrastructure** | Docker + Docker Compose |
 
 ## Project Structure
 
 ```
 marketing-content/
-├── README.md
-├── FEATURES.md                  # Feature implementation graph
-├── strategy/                    # Architecture & design documents
-│   ├── 00-overview.md           # System overview & architecture
-│   ├── 01-agent-design.md       # Agent patterns (Supervisor + 6 agents)
-│   ├── 02-feature-roadmap.md    # 7-sprint implementation plan (3 months)
-│   ├── 03-database-schema.md    # Full Prisma schema with ERD
-│   ├── 04-api-integrations.md   # API integration specs (10 services)
-│   └── 05-frontend-ux.md        # UI/UX design & component specs
-├── docs/                        # Thesis documents (PDF)
 ├── ai-service/                  # [ACTIVE] FastAPI AI service
 │   ├── app/
 │   │   ├── main.py              # FastAPI app, lifespan, CORS
 │   │   ├── config.py            # Pydantic Settings (env vars)
-│   │   ├── agents/              # LangGraph agent graph
+│   │   ├── agents/              # LangGraph agent pipeline
 │   │   │   ├── state.py         # Shared state (TypedDict)
-│   │   │   ├── supervisor.py    # Graph construction + fan-out/fan-in
-│   │   │   ├── analyzer.py      # Claude-powered analysis node
-│   │   │   └── scanners/        # 6 platform scanner nodes
-│   │   ├── tools/               # Platform API wrappers
-│   │   ├── clients/             # Singleton HTTP clients
+│   │   │   ├── supervisor.py    # Graph construction (linear pipeline)
+│   │   │   ├── analyzer.py      # GPT-4o trend analysis (tech + LinkedIn focus)
+│   │   │   ├── content_saver.py # Save articles as markdown
+│   │   │   ├── reporter.py      # Vietnamese LinkedIn report + content angles
+│   │   │   └── scanners/        # HackerNews scanner node
+│   │   ├── tools/               # HackerNews API wrapper
+│   │   ├── clients/             # LLM clients
 │   │   ├── core/                # Rate limiter, cache, dedup, retry
 │   │   ├── api/v1/              # REST endpoints + Pydantic schemas
 │   │   └── db/                  # SQLAlchemy models + session
 │   ├── alembic/                 # Database migrations
-│   ├── tests/                   # Unit + integration tests
-│   ├── docker-compose.yml       # PostgreSQL + Redis + App
-│   ├── Dockerfile
+│   ├── content/                 # Saved articles (hackernews/{date}/)
+│   ├── reports/                 # Generated reports ({scan_run_id}/)
+│   ├── docker-compose.yml
 │   └── pyproject.toml
+├── docs/                        # Architecture & design documents
 ├── backend/                     # [PLANNED] NestJS API
 └── frontend/                    # [PLANNED] Next.js 15 app
 ```
-
-## API Integrations
-
-| API | Purpose | Auth | Cost |
-|-----|---------|------|------|
-| Google Trends (pytrends) | Trend crawling | None | Free |
-| Reddit (PRAW) | Trend crawling | OAuth | Free (60 req/min) |
-| YouTube Data API v3 | Trending videos | API Key | Free (10k quota/day) |
-| TikTok (RapidAPI) | Trending feed + hashtags | RapidAPI Key | Freemium |
-| Twitter/X (RapidAPI) | Trending topics + tweets | RapidAPI Key | Freemium |
-| Instagram (RapidAPI) | Trending reels + hashtags | RapidAPI Key | Freemium |
-| Firecrawl | Web scraping (fallback) | API Key | Freemium |
-| Claude Sonnet | LLM analysis & generation | API Key | ~$0.14/day |
-| DALL-E 3 | Image generation | API Key | $0.04/image |
-| Facebook Graph API | Publish + analytics | OAuth | Free |
-| Instagram Graph API | Publish + analytics | OAuth | Free |
 
 ## Getting Started
 
 ### Prerequisites
 - Python 3.11+
 - Docker & Docker Compose
-- API keys (see `.env.example`)
+- OpenAI API key
 
-### Quick Start (AI Service)
+### Quick Start
 
 ```bash
 cd ai-service
@@ -127,10 +95,10 @@ uvicorn app.main:app --reload --port 8000
 # Health check
 curl http://localhost:8000/health
 
-# Trigger a trend scan (free APIs only)
+# Trigger a HackerNews scan
 curl -X POST http://localhost:8000/api/v1/scan \
   -H "Content-Type: application/json" \
-  -d '{"platforms": ["google_trends", "reddit"]}'
+  -d '{"platforms": ["hackernews"], "options": {"max_items_per_platform": 30}}'
 
 # Check scan status
 curl http://localhost:8000/api/v1/scan/{scan_id}/status
@@ -140,25 +108,23 @@ curl http://localhost:8000/api/v1/trends?sort_by=relevance_score
 
 # Get top trends
 curl http://localhost:8000/api/v1/trends/top?timeframe=24h&limit=20
+
+# View generated report
+curl http://localhost:8000/api/v1/reports/{scan_run_id}
 ```
 
-## Implementation Roadmap
+## Pipeline Architecture
 
-| Sprint | Duration | Focus | Status |
-|--------|----------|-------|--------|
-| 1 | Weeks 1-2 | Setup & Architecture | Planned |
-| 2 | Weeks 3-4 | Trend Discovery | **In Progress** |
-| 3 | Weeks 5-6 | Content Generation | Planned |
-| 4 | Weeks 7-8 | Media Creation | Planned |
-| 5 | Weeks 9-10 | Scheduling & Publishing | Planned |
-| 6 | Week 11 | Analytics & Feedback Loop | Planned |
-| 7 | Week 12 | Testing & Polish | Planned |
-
-## Scope
-
-**In Scope:** Trend crawling, content generation (3 styles), image generation, scheduling, Facebook/Instagram publishing, analytics collection.
-
-**Out of Scope:** Videos > 60 seconds, enterprise scale (>1000 users), paid advertising management, TikTok publishing (stretch goal).
+```
+START
+  → hackernews_scanner    (crawl top HN stories, extract articles, filter tech)
+  → collect_results       (validate and merge results)
+  → analyzer              (GPT-4o: categorize, sentiment, score for LinkedIn relevance)
+  → content_saver         (save articles as markdown to content/hackernews/{date}/)
+  → reporter              (generate Vietnamese LinkedIn report + content angles JSON)
+  → persist_results       (save to PostgreSQL)
+END
+```
 
 ## Author
 

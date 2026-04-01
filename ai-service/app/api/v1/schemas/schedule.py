@@ -15,18 +15,18 @@ class ScheduleRequest(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "summary": "Every 6 hours — all platforms",
+                    "summary": "Every 6 hours — HackerNews scan",
                     "value": {
                         "cron_expression": "0 */6 * * *",
-                        "platforms": ["youtube", "google_news"],
+                        "platforms": ["hackernews"],
                         "is_active": True,
                     },
                 },
                 {
-                    "summary": "Daily at 9am — Google News only",
+                    "summary": "Daily at 9am",
                     "value": {
                         "cron_expression": "0 9 * * *",
-                        "platforms": ["google_news"],
+                        "platforms": ["hackernews"],
                         "is_active": True,
                     },
                 },

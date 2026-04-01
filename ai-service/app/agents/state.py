@@ -23,15 +23,16 @@ class TrendScanState(TypedDict):
     # Scanner outputs - each scanner appends via operator.add
     raw_results: Annotated[list[RawTrendData], operator.add]
 
-    # Analyzer output
-    analyzed_trends: list[dict]
-    cross_platform_groups: list[dict]
+    # Trend analyzer output (combined analysis + report)
+    analyzed_trends: list[dict]  # Processed articles that passed quality threshold
+    discarded_articles: list[dict]  # Articles below quality threshold
+    trend_report_md: str  # Full markdown trend report
+    analysis_meta: dict  # Meta info (counts, dominant sentiment, top trend, etc.)
 
     # Content saver output
     content_file_paths: list[str]
 
-    # Reporter output
-    report_content: str
+    # Report file output
     report_file_path: str
 
     # Control

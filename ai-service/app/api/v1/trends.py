@@ -25,12 +25,10 @@ router = APIRouter()
     description=(
         "Returns a paginated list of analyzed trends with optional filters.\n\n"
         "**Filter params:**\n"
-        "- `platform` — `youtube` | `google_news`\n"
-        "- `category` — `tech` | `fashion` | `food` | `beauty` | `fitness` | `business` | "
-        "`entertainment` | `gaming` | `education` | `health` | `travel` | `sports` | `music` | "
-        "`politics` | `lifestyle` | `other`\n"
-        "- `sentiment` — `positive` | `negative` | `neutral` | `mixed`\n"
-        "- `lifecycle` — `rising` | `peak` | `declining`\n"
+        "- `platform` — `hackernews`\n"
+        "- `category` — `tech` | `business` | `education` | `other` (focused on Technology domain)\n"
+        "- `sentiment` — `bullish` | `neutral` | `bearish` | `controversial`\n"
+        "- `lifecycle` — `emerging` | `rising` | `peaking` | `saturated` | `declining`\n"
         "- `min_score` — minimum relevance score (0–10)\n\n"
         "**Sort:** `relevance_score` (default) | `views` | `discovered_at`"
     ),

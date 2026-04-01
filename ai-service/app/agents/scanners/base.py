@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 import structlog
 
 from app.agents.state import RawTrendData, TrendScanState
-from app.core.cache import Cache
 from app.core.rate_limiter import RateLimiter
 
 logger = structlog.get_logger()
@@ -14,9 +13,8 @@ class BaseScannerNode(ABC):
 
     platform: str
 
-    def __init__(self, rate_limiter: RateLimiter, cache: Cache):
+    def __init__(self, rate_limiter: RateLimiter):
         self.rate_limiter = rate_limiter
-        self.cache = cache
 
     async def __call__(self, state: TrendScanState) -> dict:
         try:
@@ -25,32 +23,12 @@ class BaseScannerNode(ABC):
             # Check rate limit
             await self.rate_limiter.check(self.platform)
 
-            # Check cache
-            cache_key = f"scan:{self.platform}:latest"
-            cached = await self.cache.get(cache_key)
-            if cached:
-                logger.info("Scanner using cache", platform=self.platform, items=len(cached))
-                return {
-                    "raw_results": [
-                        RawTrendData(
-                            platform=self.platform,
-                            items=cached,
-                            error=None,
-                            metadata={"from_cache": True, "items_count": len(cached)},
-                        )
-                    ]
-                }
-
             # Fetch fresh data
             items = await self.fetch(state.get("options", {}))
 
             # Log warning if no items returned
             if not items:
                 logger.warning("Scanner returned 0 items", platform=self.platform)
-
-            # Cache results (TTL: 30 minutes)
-            if items:
-                await self.cache.set(cache_key, items, ttl=1800)
 
             logger.info("Scanner completed", platform=self.platform, items=len(items))
             return {

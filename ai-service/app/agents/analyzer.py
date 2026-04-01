@@ -9,23 +9,24 @@ from app.core.dedup import compute_dedup_key, titles_are_similar
 
 logger = structlog.get_logger()
 
-ANALYZER_SYSTEM_PROMPT = """You are a trend analysis expert. You receive raw trending data from multiple social media platforms and must analyze each item.
+ANALYZER_SYSTEM_PROMPT = """You are a Technology trend analysis expert focused on the LinkedIn professional audience. You receive trending data from Hacker News and must analyze each item for its relevance to technology professionals and LinkedIn content creation.
 
 For each trending item, provide:
 
-1. **category**: One of: tech, fashion, food, beauty, fitness, business, entertainment, gaming, education, health, travel, sports, music, politics, lifestyle, other
+1. **category**: One of: tech, business, education, other
+   Focus on technology-related categorization since the data comes from Hacker News.
 
 2. **sentiment**: One of: positive, negative, neutral, mixed
 
 3. **lifecycle**: One of: rising (new/gaining traction), peak (maximum popularity), declining (losing momentum)
 
-4. **relevance_score**: Float 0-10 indicating global significance. Consider:
-   - Cross-platform presence (appears on multiple platforms = higher)
-   - Engagement metrics relative to platform norms
+4. **relevance_score**: Float 0-10 indicating relevance for LinkedIn technology content. Consider:
+   - Relevance to technology professionals on LinkedIn
+   - Engagement metrics (HN score, comments)
    - Timeliness and novelty
-   - Potential for content creation
+   - Potential for LinkedIn content creation (thought leadership, industry insights, career advice)
 
-5. **related_topics**: List of 2-5 related trending topics or keywords
+5. **related_topics**: List of 2-5 related technology topics or keywords relevant to LinkedIn audience
 
 Return a JSON array where each object has:
 {
@@ -37,9 +38,7 @@ Return a JSON array where each object has:
   "related_topics": ["...", "..."]
 }
 
-Be accurate and consistent. Analyze ALL items provided.
-
-If the trend title or description is in Vietnamese, provide related_topics in Vietnamese as well."""
+Be accurate and consistent. Analyze ALL items provided. Prioritize items that would resonate with a LinkedIn technology audience."""
 
 
 def _chunks(lst: list, n: int):

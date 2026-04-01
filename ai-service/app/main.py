@@ -35,27 +35,22 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Trending Scanner Agent",
+    title="LinkedIn Technology Trend Scanner",
     description=(
-        "AI-powered trending content scanner across social media platforms.\n\n"
+        "AI-powered technology trend scanner for LinkedIn content creation.\n\n"
         "## Workflow\n"
-        "1. **Trigger a scan** — `POST /api/v1/scan` with desired platforms\n"
+        "1. **Trigger a scan** — `POST /api/v1/scan` to crawl HackerNews\n"
         "2. **Poll status** — `GET /api/v1/scan/{scan_id}/status` until `completed`\n"
-        "3. **Query trends** — `GET /api/v1/trends` with filters\n\n"
-        "## Supported platforms\n"
-        "`youtube` · `google_news` · `google_news_topic`\n\n"
-        "### Google News workflow\n"
-        "The `google_news` scanner fetches trending keywords from Google Trends, "
-        "then crawls news articles for each keyword. Analyzed articles are saved as "
-        "individual markdown files in the `content/` directory.\n\n"
-        "### Google News Topic workflow\n"
-        "The `google_news_topic` scanner fetches news articles for specific topics "
-        "(e.g. TECHNOLOGY, HEALTH, BUSINESS). Topics can be passed in scan options "
-        "or defaults from config are used.\n\n"
+        "3. **Query trends** — `GET /api/v1/trends` with filters\n"
+        "4. **View reports** — `GET /api/v1/reports/{scan_run_id}` for LinkedIn-focused report\n\n"
+        "## Data source\n"
+        "`hackernews` — Top stories from Hacker News, crawled and analyzed for LinkedIn relevance.\n\n"
+        "## Pipeline\n"
+        "HackerNews → GPT-4o Analysis → Content Save → LinkedIn Report → Database\n\n"
         "## Scan lifecycle\n"
         "`pending` → `running` → `completed` | `partial` | `failed`"
     ),
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",

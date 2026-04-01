@@ -4,24 +4,42 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class ContentAngle(BaseModel):
-    trend_title: str
-    platform: str = Field(description="Target platform: facebook, youtube, tiktok")
-    content_type: str = Field(description="Content format: post, reel_script, carousel, story, short_video, thread")
-    writing_style: str = Field(description="Writing style: trendy, professional, storytelling, educational, humorous")
-    hook: str = Field(description="Opening line / attention grabber ready to use")
-    estimated_engagement: str = Field(description="Expected engagement level: high, medium, low")
-    rationale: str = Field(description="Why this content angle works")
+class LinkedInAngleReport(BaseModel):
+    angle: str = Field(description="Content hook (max 15 words)")
+    format: str = Field(description="Format: thought_leadership, case_study, hot_take, tutorial, industry_analysis, career_advice, behind_the_scenes")
+    hook_line: str = Field(description="Scroll-stopper opening line (max 20 words)")
 
 
-class TrendRankEntry(BaseModel):
-    rank: int
+class ProcessedArticle(BaseModel):
+    id: str
     title: str
-    platform: str
-    category: str
-    relevance_score: float
+    source_url: str = ""
+    source_type: str = Field(default="community", description="official_blog | news | research | community | social")
+    quality_score: float
+    cleaned_content: str = ""
+    key_data_points: list[str] = []
     sentiment: str
+    engagement_prediction: str
     lifecycle: str
+    linkedin_angles: list[LinkedInAngleReport] = []
+    target_audience: list[str] = []
+
+
+class DiscardedArticle(BaseModel):
+    id: str
+    title: str
+    quality_score: float
+    discard_reason: str
+
+
+class AnalysisMeta(BaseModel):
+    total_input: int = 0
+    passed: int = 0
+    discarded: int = 0
+    dominant_sentiment: str = ""
+    top_trend: str = ""
+    top_linkedin_format: str = ""
+    suggested_posting_window: str = ""
 
 
 class ReportListItem(BaseModel):
@@ -39,18 +57,16 @@ class ReportListResponse(BaseModel):
 
 class ReportContentResponse(BaseModel):
     scan_run_id: uuid.UUID
-    content: str = Field(description="Full markdown report content")
+    content: str = Field(description="Full markdown trend report")
     report_file_path: str
     generated_at: datetime
 
 
 class ReportSummaryResponse(BaseModel):
     scan_run_id: str
-    executive_summary: str
-    total_trends: int
-    platforms_covered: list[str]
-    stats: dict = {}
-    top_trends: list[TrendRankEntry] = []
-    content_angles: list[ContentAngle] = []
-    cross_platform_groups: list[dict] = []
+    meta: AnalysisMeta = Field(default_factory=AnalysisMeta)
+    processed_count: int = 0
+    discarded_count: int = 0
+    processed_articles: list[ProcessedArticle] = []
+    discarded_articles: list[DiscardedArticle] = []
     generated_at: str
