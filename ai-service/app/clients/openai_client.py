@@ -36,3 +36,25 @@ def get_analyzer_llm() -> ChatOpenAI:
         max_tokens=16384,
         temperature=0.1,
     )
+
+
+def get_content_gen_llm() -> ChatOpenAI:
+    """LLM for LinkedIn post generation — creative writing needs higher temperature."""
+    settings = get_settings()
+    return ChatOpenAI(
+        model="gpt-4o",
+        api_key=settings.OPENAI_API_KEY,
+        max_tokens=8192,
+        temperature=0.7,
+    )
+
+
+def get_review_llm() -> ChatOpenAI:
+    """LLM for auto-review scoring — precise evaluation needs low temperature."""
+    settings = get_settings()
+    return ChatOpenAI(
+        model="gpt-4o",
+        api_key=settings.OPENAI_API_KEY,
+        max_tokens=4096,
+        temperature=0.1,
+    )

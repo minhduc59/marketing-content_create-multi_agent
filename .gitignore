@@ -26,3 +26,6 @@ Thumbs.db
 # Generated reports
 ai-service/reports/
 ai-service/content/
+
+ai-service/posts
+ai-service/strategy

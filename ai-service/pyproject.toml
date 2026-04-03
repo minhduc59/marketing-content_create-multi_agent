@@ -27,6 +27,9 @@ dependencies = [
     # HTTP client (for HackerNews API)
     "httpx>=0.28.0",
 
+    # Web scraping
+    "firecrawl-py>=1.0.0",
+
     # Utilities
     "tenacity>=9.0.0",
     "structlog>=24.4.0",

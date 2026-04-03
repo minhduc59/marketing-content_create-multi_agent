@@ -84,6 +84,17 @@ For each surviving article:
 
 - `key_data_points`: extract up to 5 specific numbers, statistics, or quantifiable claims (these are gold for LinkedIn posts)
 
+- `source_type`: classify the article source as exactly one of: official_blog, news, research, community, social
+  (Do NOT invent new values. Use "official_blog" for company/project blogs, "news" for media outlets, "research" for papers/reports, "community" for forums/discussions, "social" for social media posts.)
+
+### CRITICAL — Enum value constraints
+All enum fields MUST use EXACTLY one of the listed values. Do NOT abbreviate, paraphrase, or invent new values.
+- `sentiment`: bullish | neutral | bearish | controversial
+- `engagement_prediction`: low | medium | high | viral
+- `lifecycle`: emerging | rising | peaking | saturated | declining
+- `source_type`: official_blog | news | research | community | social
+- `linkedin_angles[].format`: thought_leadership | case_study | hot_take | tutorial | industry_analysis | career_advice | behind_the_scenes
+
 ---
 
 ## PHASE 2: REPORT GENERATION
@@ -136,7 +147,7 @@ For each passing article:
   "id": "<article_id>",
   "title": "<cleaned title>",
   "source_url": "<url>",
-  "source_type": "official_blog | news | research | community | social",
+  "source_type": "<MUST be exactly one of: official_blog, news, research, community, social>",
   "quality_score": <number>,
   "cleaned_content": "<extracted core content>",
   "key_data_points": ["<stat1>", "<stat2>"],
@@ -445,6 +456,94 @@ async def trend_analyzer_node(state: TrendScanState) -> dict:
     # Use the first chunk's report as the main report (it has the full structure)
     # For multi-chunk scenarios, the first chunk report covers the top articles
     trend_report_md = all_report_sections[0] if all_report_sections else ""
+
+    # Auto-promote discarded articles when post generation needs more trends.
+    # Uses a retry loop (max 2 attempts) to handle LLM still discarding some articles.
+    generate_posts = options.get("generate_posts", False)
+    num_posts = options.get("num_posts", 0)
+
+    if generate_posts and num_posts > 0 and len(all_processed) < num_posts and all_discarded:
+        remaining_discarded = sorted(
+            all_discarded,
+            key=lambda d: d.get("quality_score", 0),
+            reverse=True,
+        )
+        attempted_ids: set[str] = set()
+        max_promotion_attempts = 2
+
+        for attempt in range(max_promotion_attempts):
+            if len(all_processed) >= num_posts or not remaining_discarded:
+                break
+
+            deficit = num_posts - len(all_processed)
+            # Pick top candidates not yet attempted
+            candidates = [
+                d for d in remaining_discarded if d["id"] not in attempted_ids
+            ][:deficit]
+
+            if not candidates:
+                break
+
+            ids_to_promote = [d["id"] for d in candidates]
+            attempted_ids.update(ids_to_promote)
+
+            items_to_promote = [
+                all_items[int(did)] for did in ids_to_promote
+                if int(did) < len(all_items)
+            ]
+
+            if not items_to_promote:
+                break
+
+            logger.info(
+                "TrendAnalyzer: promoting discarded articles",
+                attempt=attempt + 1,
+                deficit=deficit,
+                promoting=len(items_to_promote),
+            )
+
+            try:
+                promote_articles = _prepare_raw_articles(items_to_promote)
+                promote_prompt = TREND_ANALYZER_SYSTEM_PROMPT.format(
+                    quality_threshold=1,
+                    date=today,
+                    keywords=json.dumps(keywords),
+                )
+                promote_response = await llm.ainvoke([
+                    SystemMessage(content=promote_prompt),
+                    HumanMessage(content=json.dumps(promote_articles, default=str)),
+                ])
+                promote_result = _parse_llm_response(promote_response.content)
+                promoted = promote_result.get("processed_articles", [])
+
+                # Fix IDs back to original all_items indices and tag as promoted
+                for article, orig_id in zip(promoted, ids_to_promote):
+                    article["id"] = orig_id
+                    article["_promoted"] = True
+
+                all_processed.extend(promoted)
+
+                # Remove all attempted IDs from remaining pool
+                remaining_discarded = [
+                    d for d in remaining_discarded if d["id"] not in attempted_ids
+                ]
+
+                logger.info(
+                    "TrendAnalyzer: promoted articles",
+                    attempt=attempt + 1,
+                    promoted=len(promoted),
+                    total_processed=len(all_processed),
+                )
+            except Exception as e:
+                logger.error(
+                    "TrendAnalyzer: promotion re-analysis failed",
+                    attempt=attempt + 1,
+                    error=str(e),
+                )
+                break
+
+        # Update all_discarded to reflect removals
+        all_discarded = [d for d in all_discarded if d["id"] not in attempted_ids]
 
     # Update meta with actual totals
     final_meta.update({

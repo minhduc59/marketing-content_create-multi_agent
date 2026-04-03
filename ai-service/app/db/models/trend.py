@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Enum,
     Float,
@@ -89,6 +90,9 @@ class TrendItem(Base):
     key_data_points: Mapped[list] = mapped_column(JSON, default=list)
     target_audience: Mapped[list] = mapped_column(JSON, default=list)
     cleaned_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Promotion flag — True if this article was promoted from discarded pool
+    is_promoted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     # Cross-platform dedup
     dedup_key: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)

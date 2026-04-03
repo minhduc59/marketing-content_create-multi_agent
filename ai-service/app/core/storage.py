@@ -26,6 +26,10 @@ class StorageBackend(abc.ABC):
         """Write text content. Returns the storage path/URL."""
 
     @abc.abstractmethod
+    def write_bytes(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> str:
+        """Write binary content (e.g. images). Returns the storage path/URL."""
+
+    @abc.abstractmethod
     def read_text(self, key: str) -> str:
         """Read text content by key."""
 
@@ -45,6 +49,13 @@ class LocalStorage(StorageBackend):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         logger.debug("LocalStorage: written", path=str(path))
+        return key
+
+    def write_bytes(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> str:
+        path = self.base_dir / key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        logger.debug("LocalStorage: written bytes", path=str(path), size=len(data))
         return key
 
     def read_text(self, key: str) -> str:
@@ -78,6 +89,18 @@ class S3Storage(StorageBackend):
         )
         s3_path = f"s3://{self.bucket}/{full_key}"
         logger.debug("S3Storage: uploaded", s3_path=s3_path)
+        return s3_path
+
+    def write_bytes(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> str:
+        full_key = self._full_key(key)
+        self.client.put_object(
+            Bucket=self.bucket,
+            Key=full_key,
+            Body=data,
+            ContentType=content_type,
+        )
+        s3_path = f"s3://{self.bucket}/{full_key}"
+        logger.debug("S3Storage: uploaded bytes", s3_path=s3_path, size=len(data))
         return s3_path
 
     def read_text(self, key: str) -> str:

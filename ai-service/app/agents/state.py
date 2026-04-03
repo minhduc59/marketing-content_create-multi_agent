@@ -35,5 +35,10 @@ class TrendScanState(TypedDict):
     # Report file output
     report_file_path: str
 
+    # Post generation
+    generate_posts: bool  # Whether to run the post generation pipeline
+    post_gen_options: dict  # {num_posts, formats}
+    post_gen_output: dict  # Final output from post generation (content_plan, posts, strategy_update)
+
     # Control
     errors: Annotated[list[ScanError], operator.add]

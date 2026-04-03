@@ -36,3 +36,6 @@ class ScanRun(Base):
     trend_items: Mapped[list["TrendItem"]] = relationship(
         back_populates="scan_run", cascade="all, delete-orphan"
     )
+    content_posts: Mapped[list["ContentPost"]] = relationship(
+        back_populates="scan_run", cascade="all, delete-orphan"
+    )

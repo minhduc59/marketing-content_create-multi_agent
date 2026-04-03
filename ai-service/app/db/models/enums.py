@@ -41,3 +41,21 @@ class SourceType(str, enum.Enum):
     RESEARCH = "research"
     COMMUNITY = "community"
     SOCIAL = "social"
+
+
+class ContentStatus(str, enum.Enum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    NEEDS_REVISION = "needs_revision"
+    FLAGGED_FOR_REVIEW = "flagged_for_review"
+    PUBLISHED = "published"
+
+
+class PostFormat(str, enum.Enum):
+    THOUGHT_LEADERSHIP = "thought_leadership"
+    HOT_TAKE = "hot_take"
+    CASE_STUDY = "case_study"
+    TUTORIAL = "tutorial"
+    INDUSTRY_ANALYSIS = "industry_analysis"
+    CAREER_ADVICE = "career_advice"
+    BEHIND_THE_SCENES = "behind_the_scenes"
