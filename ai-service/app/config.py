@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
 
+    # Firecrawl
+    FIRECRAWL_API_KEY: str = ""
+
+    # BFL (Black Forest Labs) — FLUX image generation
+    BFL_API_KEY: str = ""
+    BFL_API_BASE_URL: str = "https://api.bfl.ai/v1"
+
     # S3 (production storage)
     S3_BUCKET: str = ""
     S3_REGION: str = "ap-southeast-1"

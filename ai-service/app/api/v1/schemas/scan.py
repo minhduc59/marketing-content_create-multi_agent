@@ -6,6 +6,14 @@ from pydantic import BaseModel, Field
 from app.db.models.enums import Platform, ScanStatus
 
 
+class PostGenOptions(BaseModel):
+    num_posts: int = Field(default=3, ge=1, le=10, description="Number of posts to generate (1-10)")
+    formats: list[str] | None = Field(
+        default=None,
+        description="Allowed post formats (e.g. thought_leadership, hot_take, case_study). None = all.",
+    )
+
+
 class ScanOptions(BaseModel):
     max_items_per_platform: int = Field(default=50, ge=1, le=200, description="Max items to fetch (1–200)")
     include_comments: bool = Field(default=True, description="Whether to fetch top comments for each item")
@@ -24,6 +32,14 @@ class ScanOptions(BaseModel):
             "Robotics & Automation",
         ],
         description="Target tech keywords for trend analysis",
+    )
+    generate_posts: bool = Field(
+        default=False,
+        description="Whether to auto-generate LinkedIn posts after scan completes",
+    )
+    post_gen_options: PostGenOptions = Field(
+        default_factory=PostGenOptions,
+        description="Options for post generation (only used when generate_posts=True)",
     )
 
 

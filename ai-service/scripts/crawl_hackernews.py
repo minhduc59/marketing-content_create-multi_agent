@@ -12,13 +12,14 @@ Usage:
 import asyncio
 import hashlib
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
-from html.parser import HTMLParser
 from pathlib import Path
 
 import httpx
+from firecrawl import FirecrawlApp
 
 HN_API_BASE = "https://hacker-news.firebaseio.com/v0"
 MAX_CONCURRENT_FETCHES = 10
@@ -60,78 +61,11 @@ NON_TECH_PATTERNS = [
 ]
 
 
-class HTMLTextExtractor(HTMLParser):
-    """Extract text and meta tags from HTML."""
-
-    def __init__(self):
-        super().__init__()
-        self._result: list[str] = []
-        self._skip = False
-        self._skip_tags = {"script", "style", "nav", "footer", "header", "aside", "noscript"}
-        self.og_image = ""
-        self.og_title = ""
-        self.og_description = ""
-        self.article_published_time = ""
-        self.canonical_url = ""
-        self.page_title = ""
-        self._in_title = False
-
-    def handle_starttag(self, tag, attrs):
-        attrs_dict = dict(attrs)
-        if tag in self._skip_tags:
-            self._skip = True
-        if tag == "title":
-            self._in_title = True
-
-        if tag == "meta":
-            prop = attrs_dict.get("property", "") or attrs_dict.get("name", "")
-            content = attrs_dict.get("content", "")
-            if prop == "og:image" and content:
-                self.og_image = content
-            elif prop == "og:title" and content:
-                self.og_title = content
-            elif prop in ("og:description", "description") and content and not self.og_description:
-                self.og_description = content
-            elif prop == "article:published_time" and content:
-                self.article_published_time = content
-            elif prop == "datePublished" and content:
-                self.article_published_time = self.article_published_time or content
-
-        if tag == "link":
-            rel = attrs_dict.get("rel", "")
-            if rel == "canonical" and attrs_dict.get("href"):
-                self.canonical_url = attrs_dict["href"]
-
-        if tag == "img" and not self.og_image:
-            src = attrs_dict.get("src", "")
-            if src and src.startswith("http") and not any(x in src for x in ["logo", "icon", "avatar", "pixel", "tracking", "1x1"]):
-                width = attrs_dict.get("width", "")
-                height = attrs_dict.get("height", "")
-                try:
-                    if (not width or int(width) >= 200) and (not height or int(height) >= 100):
-                        self.og_image = src
-                except ValueError:
-                    pass
-
-    def handle_endtag(self, tag):
-        if tag in self._skip_tags:
-            self._skip = False
-        if tag == "title":
-            self._in_title = False
-        if tag in ("p", "div", "br", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "blockquote"):
-            self._result.append("\n\n")
-
-    def handle_data(self, data):
-        if self._in_title and not self.page_title:
-            self.page_title = data.strip()
-        if not self._skip:
-            self._result.append(data)
-
-    def get_text(self):
-        text = "".join(self._result)
-        text = re.sub(r"\n{3,}", "\n\n", text)
-        text = re.sub(r"[ \t]+", " ", text)
-        return text.strip()
+def _init_firecrawl() -> FirecrawlApp:
+    api_key = os.getenv("FIRECRAWL_API_KEY", "")
+    if not api_key:
+        print("WARNING: FIRECRAWL_API_KEY not set. Firecrawl calls will fail.", file=sys.stderr)
+    return FirecrawlApp(api_key=api_key)
 
 
 def is_tech_related(title: str, text: str) -> bool:
@@ -225,40 +159,30 @@ async def fetch_story(client: httpx.AsyncClient, story_id: int) -> dict | None:
         return None
 
 
-async def crawl_article(client: httpx.AsyncClient, url: str) -> dict | None:
+async def crawl_article(firecrawl: FirecrawlApp, url: str) -> dict | None:
     try:
-        resp = await client.get(url, timeout=CRAWL_TIMEOUT, follow_redirects=True)
-        resp.raise_for_status()
+        result = await asyncio.to_thread(
+            firecrawl.scrape_url,
+            url,
+            params={"formats": ["markdown"]},
+        )
 
-        content_type = resp.headers.get("content-type", "")
-        if "text/html" not in content_type and "application/xhtml" not in content_type:
+        markdown = result.get("markdown", "")
+        if len(markdown.split()) < MIN_CONTENT_WORDS:
             return None
 
-        html = resp.text
-        parser = HTMLTextExtractor()
-        parser.feed(html)
-        text = parser.get_text()
-
-        if len(text.split()) < MIN_CONTENT_WORDS:
-            return None
-
+        metadata = result.get("metadata", {})
         return {
-            "full_text": text,
-            "og_image": parser.og_image,
-            "og_title": parser.og_title,
-            "og_description": parser.og_description,
-            "published_time": parser.article_published_time,
-            "canonical_url": parser.canonical_url or url,
-            "page_title": parser.page_title,
+            "full_text": markdown,
+            "og_image": metadata.get("og:image", ""),
+            "og_title": metadata.get("og:title", ""),
+            "og_description": metadata.get("og:description", "") or metadata.get("description", ""),
+            "published_time": metadata.get("article:published_time", ""),
+            "canonical_url": metadata.get("og:url", "") or metadata.get("sourceURL", url),
+            "page_title": metadata.get("title", ""),
         }
-    except httpx.HTTPStatusError as e:
-        return {"error": f"HTTP {e.response.status_code}"}
-    except httpx.TimeoutException:
-        return {"error": "Timeout"}
-    except httpx.ConnectError:
-        return {"error": "Connection failed"}
     except Exception as e:
-        return {"error": str(e)[:100]}
+        return {"error": str(e)[:200]}
 
 
 async def run_crawl(max_stories: int = 30, output_dir: str = "./content"):
@@ -310,13 +234,14 @@ async def run_crawl(max_stories: int = 30, output_dir: str = "./content"):
         stories = unique_stories
         print(f"       {len(stories)} unique stories with external URLs")
 
-        # Step 3: Crawl articles
-        print(f"[3/5] Crawling {len(stories)} article URLs...")
+        # Step 3: Crawl articles via Firecrawl
+        print(f"[3/5] Crawling {len(stories)} article URLs via Firecrawl...")
+        firecrawl = _init_firecrawl()
         sem_crawl = asyncio.Semaphore(MAX_CONCURRENT_CRAWLS)
 
         async def crawl_with_sem(story):
             async with sem_crawl:
-                result = await crawl_article(client, story["url"])
+                result = await crawl_article(firecrawl, story["url"])
                 return story, result
 
         crawl_results = await asyncio.gather(*[crawl_with_sem(s) for s in stories])

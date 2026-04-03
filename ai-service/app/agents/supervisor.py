@@ -8,6 +8,7 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
 
 from app.agents.content_saver import content_saver_node
+from app.agents.post_generator.runner import run_post_generation
 from app.agents.scanners.hackernews import HackerNewsScannerNode
 from app.agents.state import TrendScanState
 from app.agents.trend_analyzer import trend_analyzer_node
@@ -15,16 +16,51 @@ from app.api.v1.schemas.scan import ScanRequest
 from app.config import get_settings
 from app.core.rate_limiter import RateLimiter
 from app.db.models import ScanRun, ScanStatus, TrendComment, TrendItem
+from app.db.models.enums import SourceType
 from app.db.session import async_session_factory
 
 logger = structlog.get_logger()
+
+# Map common LLM-generated source_type values to valid enum values
+_SOURCE_TYPE_ALIASES: dict[str, str] = {
+    "blog": "official_blog",
+    "article": "news",
+    "paper": "research",
+    "forum": "community",
+    "discussion": "community",
+    "twitter": "social",
+    "reddit": "social",
+}
+_VALID_SOURCE_TYPES = {e.value for e in SourceType}
+
+
+def _normalize_source_type(raw: str | None) -> str | None:
+    """Normalize LLM source_type output to a valid SourceType enum value."""
+    if not raw:
+        return None
+    val = raw.strip().lower()
+    if val in _VALID_SOURCE_TYPES:
+        return val
+    return _SOURCE_TYPE_ALIASES.get(val, "community")
+
+
+def _should_generate_posts(state: TrendScanState) -> str:
+    """Conditional router: proceed to post generation or end."""
+    if state.get("generate_posts", False):
+        return "generate_posts"
+    return "end"
 
 
 def build_trend_scan_graph(rate_limiter: RateLimiter) -> StateGraph:
     """Build and compile the LangGraph trend scanning graph.
 
-    Pipeline: hackernews_scanner → collect_results → trend_analyzer → content_saver → persist_results
+    Pipeline:
+        hackernews_scanner → collect_results → trend_analyzer → content_saver
+        → persist_results → [conditional: generate_posts or END]
+        → generate_posts → END
+
     Combined trend_analyzer merges analysis + report generation into a single LLM pass.
+    When generate_posts=True in state, the pipeline continues with LinkedIn post generation.
     """
     hackernews_node = HackerNewsScannerNode(rate_limiter)
 
@@ -36,16 +72,66 @@ def build_trend_scan_graph(rate_limiter: RateLimiter) -> StateGraph:
     graph.add_node("trend_analyzer", trend_analyzer_node)
     graph.add_node("content_saver", content_saver_node)
     graph.add_node("persist_results", persist_results_node)
+    graph.add_node("generate_posts", generate_posts_node)
 
-    # Linear pipeline: START → hackernews → collect → trend_analyzer → save → persist → END
+    # Linear pipeline up to persist_results
     graph.add_edge(START, "hackernews_scanner")
     graph.add_edge("hackernews_scanner", "collect_results")
     graph.add_edge("collect_results", "trend_analyzer")
     graph.add_edge("trend_analyzer", "content_saver")
     graph.add_edge("content_saver", "persist_results")
-    graph.add_edge("persist_results", END)
+
+    # Conditional: generate posts or finish
+    graph.add_conditional_edges(
+        "persist_results",
+        _should_generate_posts,
+        {
+            "generate_posts": "generate_posts",
+            "end": END,
+        },
+    )
+    graph.add_edge("generate_posts", END)
 
     return graph.compile()
+
+
+async def generate_posts_node(state: TrendScanState) -> dict:
+    """Run the post generation pipeline using analyzed trends from this scan.
+
+    Invokes the PostGenAgent graph (strategy_alignment → content_generation →
+    image_prompt_creation → image_generation → auto_review → output_packaging)
+    and stores the result in state.
+    """
+    scan_run_id = state.get("scan_run_id")
+    post_gen_options = state.get("post_gen_options", {})
+
+    if not scan_run_id:
+        logger.error("generate_posts: no scan_run_id")
+        return {"post_gen_output": {}}
+
+    logger.info(
+        "generate_posts: starting post generation pipeline",
+        scan_run_id=scan_run_id,
+        options=post_gen_options,
+    )
+
+    try:
+        output = await run_post_generation(scan_run_id, post_gen_options)
+
+        total_posts = len(output.get("posts", []))
+        logger.info(
+            "generate_posts: completed",
+            scan_run_id=scan_run_id,
+            total_posts=total_posts,
+        )
+        return {"post_gen_output": output}
+
+    except Exception as e:
+        logger.error("generate_posts: failed", scan_run_id=scan_run_id, error=str(e))
+        return {
+            "post_gen_output": {},
+            "errors": [{"platform": "post_generator", "error": str(e)}],
+        }
 
 
 async def collect_results_node(state: TrendScanState) -> dict:
@@ -150,11 +236,12 @@ async def persist_results_node(state: TrendScanState) -> dict:
                     quality_score=item.get("quality_score"),
                     related_topics=item.get("related_topics", []),
                     engagement_prediction=item.get("engagement_prediction"),
-                    source_type=item.get("source_type"),
+                    source_type=_normalize_source_type(item.get("source_type")),
                     linkedin_angles=item.get("linkedin_angles", []),
                     key_data_points=item.get("key_data_points", []),
                     target_audience=item.get("target_audience", []),
                     cleaned_content=item.get("cleaned_content"),
+                    is_promoted=item.get("_promoted", False),
                     dedup_key=item.get("dedup_key"),
                     cross_platform_ids=item.get("cross_platform_ids", []),
                     raw_data=item.get("raw_data"),
@@ -227,6 +314,14 @@ async def run_scan(scan_run_id: str, request: ScanRequest):
         rate_limiter = RateLimiter(redis)
         graph = build_trend_scan_graph(rate_limiter)
 
+        # Build post generation options dict
+        post_gen_opts = {}
+        if hasattr(request.options, "post_gen_options") and request.options.post_gen_options:
+            post_gen_opts = {
+                "num_posts": request.options.post_gen_options.num_posts,
+                "formats": request.options.post_gen_options.formats,
+            }
+
         initial_state = TrendScanState(
             scan_run_id=scan_run_id,
             platforms=["hackernews"],
@@ -234,6 +329,8 @@ async def run_scan(scan_run_id: str, request: ScanRequest):
                 "max_items_per_platform": request.options.max_items_per_platform,
                 "include_comments": request.options.include_comments,
                 "quality_threshold": getattr(request.options, "quality_threshold", 5),
+                "generate_posts": getattr(request.options, "generate_posts", False),
+                "num_posts": post_gen_opts.get("num_posts", 3),
                 "keywords": getattr(request.options, "keywords", None)
                 or [
                     "Artificial Intelligence & Machine Learning",
@@ -255,6 +352,9 @@ async def run_scan(scan_run_id: str, request: ScanRequest):
             analysis_meta={},
             content_file_paths=[],
             report_file_path="",
+            generate_posts=getattr(request.options, "generate_posts", False),
+            post_gen_options=post_gen_opts,
+            post_gen_output={},
             errors=[],
         )
 
