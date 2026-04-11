@@ -52,7 +52,7 @@ async def _load_analyzed_trends(scan_run_id: str) -> list[dict]:
                     item.engagement_prediction.value if item.engagement_prediction else None
                 ),
                 "source_type": item.source_type.value if item.source_type else None,
-                "linkedin_angles": item.linkedin_angles or [],
+                "content_angles": item.content_angles or [],
                 "key_data_points": item.key_data_points or [],
                 "target_audience": item.target_audience or [],
                 "cleaned_content": item.cleaned_content,
@@ -103,14 +103,14 @@ def _load_strategy() -> dict:
                 "tone": "professional yet approachable",
                 "personality": ["insightful", "data-driven", "forward-thinking"],
                 "avoid": ["hype language", "clickbait", "excessive jargon"],
-                "linkedin_persona": "Tech industry analyst sharing actionable insights",
+                "tiktok_persona": "Tech content creator sharing bite-sized insights",
             },
             "content_preferences": {
-                "preferred_formats": ["thought_leadership", "industry_analysis"],
+                "preferred_formats": ["quick_tips", "trending_breakdown"],
                 "min_data_points_per_post": 1,
-                "max_emojis": 3,
-                "cta_style": "question",
-                "hashtag_count": {"min": 3, "max": 5},
+                "max_emojis": 8,
+                "cta_style": "action",
+                "hashtag_count": {"min": 5, "max": 8},
             },
             "posting_insights": {
                 "best_days": ["Tuesday", "Wednesday", "Thursday"],

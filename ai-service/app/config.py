@@ -31,6 +31,25 @@ class Settings(BaseSettings):
     S3_REGION: str = "ap-southeast-1"
     S3_PREFIX: str = "trending-scanner"
 
+    # TikTok API
+    TIKTOK_CLIENT_KEY: str = ""
+    TIKTOK_CLIENT_SECRET: str = ""
+    TIKTOK_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/tiktok/callback"
+    TIKTOK_DEFAULT_PRIVACY: str = "SELF_ONLY"
+
+    # Token encryption (Fernet key — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    TOKEN_ENCRYPTION_KEY: str = ""
+
+    # Publishing
+    STORAGE_PUBLIC_BASE_URL: str = "http://localhost:8000/static"
+    PUBLISH_MAX_RETRIES: int = 3
+    PUBLISH_POLL_INTERVAL: int = 10
+    PUBLISH_POLL_MAX_ATTEMPTS: int = 30
+
+    # Golden Hour
+    DEFAULT_GOLDEN_HOURS: str = "07:00,12:00,19:00"
+    TIMEZONE: str = "Asia/Ho_Chi_Minh"
+
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"

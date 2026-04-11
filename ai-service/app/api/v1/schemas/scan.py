@@ -10,7 +10,7 @@ class PostGenOptions(BaseModel):
     num_posts: int = Field(default=3, ge=1, le=10, description="Number of posts to generate (1-10)")
     formats: list[str] | None = Field(
         default=None,
-        description="Allowed post formats (e.g. thought_leadership, hot_take, case_study). None = all.",
+        description="Allowed post formats (e.g. quick_tips, hot_take, trending_breakdown). None = all.",
     )
 
 
@@ -34,8 +34,8 @@ class ScanOptions(BaseModel):
         description="Target tech keywords for trend analysis",
     )
     generate_posts: bool = Field(
-        default=False,
-        description="Whether to auto-generate LinkedIn posts after scan completes",
+        default=True,
+        description="Whether to auto-generate TikTok posts after scan completes",
     )
     post_gen_options: PostGenOptions = Field(
         default_factory=PostGenOptions,
@@ -60,6 +60,17 @@ class ScanRequest(BaseModel):
                 {
                     "platforms": ["hackernews"],
                     "options": {"max_items_per_platform": 50, "include_comments": False},
+                },
+                {
+                    "platforms": ["hackernews"],
+                    "options": {
+                        "max_items_per_platform": 30,
+                        "generate_posts": True,
+                        "post_gen_options": {
+                            "num_posts": 5,
+                            "formats": ["quick_tips", "hot_take"],
+                        },
+                    },
                 },
             ]
         }

@@ -12,7 +12,7 @@ from app.db.models.enums import (
 )
 
 
-class LinkedInAngle(BaseModel):
+class ContentAngle(BaseModel):
     angle: str
     format: str
     hook_line: str
@@ -64,7 +64,7 @@ class TrendDetail(TrendSummary):
     author_followers: int | None = None
     source_type: SourceType | None = None
     related_topics: list[str] = []
-    linkedin_angles: list[LinkedInAngle] = []
+    content_angles: list[ContentAngle] = []
     key_data_points: list[str] = []
     target_audience: list[str] = []
     cross_platform_ids: list[str] = []

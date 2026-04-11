@@ -44,7 +44,7 @@ def _build_article_markdown(item: dict, index: int) -> str:
     cleaned_content = item.get("cleaned_content", "")
     key_data_points = item.get("key_data_points", [])
     target_audience = item.get("target_audience", [])
-    linkedin_angles = item.get("linkedin_angles", [])
+    content_angles = item.get("content_angles", [])
 
     lines = [
         "---",
@@ -75,11 +75,11 @@ def _build_article_markdown(item: dict, index: int) -> str:
             lines.append(f"- {dp}")
         lines.append("")
 
-    # LinkedIn angles
-    if linkedin_angles:
-        lines.append("## LinkedIn Content Angles")
-        for i, angle in enumerate(linkedin_angles, 1):
-            fmt = angle.get("format", "thought_leadership")
+    # TikTok content angles
+    if content_angles:
+        lines.append("## TikTok Content Angles")
+        for i, angle in enumerate(content_angles, 1):
+            fmt = angle.get("format", "quick_tips")
             hook = angle.get("angle", "")
             hook_line = angle.get("hook_line", "")
             lines.append(f"### Angle {i}: {fmt}")

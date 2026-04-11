@@ -86,7 +86,7 @@ class TrendItem(Base):
         Enum(SourceType, values_callable=lambda e: [m.value for m in e]),
         nullable=True,
     )
-    linkedin_angles: Mapped[list] = mapped_column(JSON, default=list)
+    content_angles: Mapped[list] = mapped_column(JSON, default=list)
     key_data_points: Mapped[list] = mapped_column(JSON, default=list)
     target_audience: Mapped[list] = mapped_column(JSON, default=list)
     cleaned_content: Mapped[str | None] = mapped_column(Text, nullable=True)

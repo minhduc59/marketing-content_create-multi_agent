@@ -35,7 +35,7 @@ class ContentPost(Base):
     # Source
     trend_title: Mapped[str] = mapped_column(String(500), nullable=False)
     trend_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    linkedin_angle_used: Mapped[str | None] = mapped_column(String, nullable=True)
+    content_angle_used: Mapped[str | None] = mapped_column(String, nullable=True)
     target_audience: Mapped[list] = mapped_column(JSON, default=list)
 
     # Posting metadata
@@ -74,3 +74,6 @@ class ContentPost(Base):
     # Relationships
     scan_run = relationship("ScanRun", back_populates="content_posts")
     trend_item = relationship("TrendItem")
+    published_posts = relationship(
+        "PublishedPost", back_populates="content_post", cascade="all, delete-orphan"
+    )

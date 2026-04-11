@@ -52,10 +52,23 @@ class ContentStatus(str, enum.Enum):
 
 
 class PostFormat(str, enum.Enum):
-    THOUGHT_LEADERSHIP = "thought_leadership"
+    QUICK_TIPS = "quick_tips"
     HOT_TAKE = "hot_take"
-    CASE_STUDY = "case_study"
-    TUTORIAL = "tutorial"
-    INDUSTRY_ANALYSIS = "industry_analysis"
-    CAREER_ADVICE = "career_advice"
-    BEHIND_THE_SCENES = "behind_the_scenes"
+    TRENDING_BREAKDOWN = "trending_breakdown"
+    DID_YOU_KNOW = "did_you_know"
+    TUTORIAL_HACK = "tutorial_hack"
+    MYTH_BUSTERS = "myth_busters"
+    BEHIND_THE_TECH = "behind_the_tech"
+
+
+class PublishStatus(str, enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    PUBLISHED = "published"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class PublishMode(str, enum.Enum):
+    AUTO = "auto"
+    MANUAL = "manual"

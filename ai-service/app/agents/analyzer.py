@@ -9,7 +9,7 @@ from app.core.dedup import compute_dedup_key, titles_are_similar
 
 logger = structlog.get_logger()
 
-ANALYZER_SYSTEM_PROMPT = """You are a Technology trend analysis expert focused on the LinkedIn professional audience. You receive trending data from Hacker News and must analyze each item for its relevance to technology professionals and LinkedIn content creation.
+ANALYZER_SYSTEM_PROMPT = """You are a Technology trend analysis expert focused on the TikTok tech audience. You receive trending data from Hacker News and must analyze each item for its relevance to tech enthusiasts, developers, students, and Gen-Z professionals on TikTok.
 
 For each trending item, provide:
 
@@ -20,13 +20,13 @@ For each trending item, provide:
 
 3. **lifecycle**: One of: rising (new/gaining traction), peak (maximum popularity), declining (losing momentum)
 
-4. **relevance_score**: Float 0-10 indicating relevance for LinkedIn technology content. Consider:
-   - Relevance to technology professionals on LinkedIn
+4. **relevance_score**: Float 0-10 indicating relevance for TikTok technology content. Consider:
+   - Relevance to tech enthusiasts and developers on TikTok
    - Engagement metrics (HN score, comments)
    - Timeliness and novelty
-   - Potential for LinkedIn content creation (thought leadership, industry insights, career advice)
+   - Potential for TikTok content creation (quick tips, hot takes, trending breakdowns, myth busting)
 
-5. **related_topics**: List of 2-5 related technology topics or keywords relevant to LinkedIn audience
+5. **related_topics**: List of 2-5 related technology topics or keywords relevant to TikTok tech audience
 
 Return a JSON array where each object has:
 {
@@ -38,7 +38,7 @@ Return a JSON array where each object has:
   "related_topics": ["...", "..."]
 }
 
-Be accurate and consistent. Analyze ALL items provided. Prioritize items that would resonate with a LinkedIn technology audience."""
+Be accurate and consistent. Analyze ALL items provided. Prioritize items that would resonate with a TikTok tech-curious audience — surprising, shareable, and visually interesting topics."""
 
 
 def _chunks(lst: list, n: int):

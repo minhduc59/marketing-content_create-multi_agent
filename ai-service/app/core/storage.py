@@ -1,7 +1,8 @@
-"""Storage abstraction for report and article files.
+"""Storage abstraction for report, article, and media files.
 
-- Development: writes to local filesystem under ai-service/reports/
-- Production: uploads to S3 bucket
+- Development: writes to local filesystem under ai-service/
+  Public URLs served via FastAPI StaticFiles mount (+ ngrok for TikTok API).
+- Production: uploads to S3 bucket, public URLs via presigned URLs or CloudFront.
 """
 
 from __future__ import annotations
@@ -37,6 +38,18 @@ class StorageBackend(abc.ABC):
     def exists(self, key: str) -> bool:
         """Check if a key exists."""
 
+    @abc.abstractmethod
+    def get_public_url(self, key: str) -> str:
+        """Get a publicly accessible URL for the given storage key.
+
+        Used by TikTok's PULL_FROM_URL to download media files.
+        Dev: ngrok-tunneled static file URL. Prod: S3 presigned URL.
+        """
+
+    @abc.abstractmethod
+    def delete(self, key: str) -> bool:
+        """Delete a file by storage key. Returns True if deleted."""
+
 
 class LocalStorage(StorageBackend):
     """Local filesystem storage under ai-service/."""
@@ -64,6 +77,18 @@ class LocalStorage(StorageBackend):
 
     def exists(self, key: str) -> bool:
         return (self.base_dir / key).exists()
+
+    def get_public_url(self, key: str) -> str:
+        settings = get_settings()
+        return f"{settings.STORAGE_PUBLIC_BASE_URL}/{key}"
+
+    def delete(self, key: str) -> bool:
+        path = self.base_dir / key
+        if path.exists():
+            path.unlink()
+            logger.debug("LocalStorage: deleted", path=str(path))
+            return True
+        return False
 
 
 class S3Storage(StorageBackend):
@@ -117,6 +142,20 @@ class S3Storage(StorageBackend):
             return True
         except botocore.exceptions.ClientError:
             return False
+
+    def get_public_url(self, key: str) -> str:
+        full_key = self._full_key(key)
+        return self.client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self.bucket, "Key": full_key},
+            ExpiresIn=3600,
+        )
+
+    def delete(self, key: str) -> bool:
+        full_key = self._full_key(key)
+        self.client.delete_object(Bucket=self.bucket, Key=full_key)
+        logger.debug("S3Storage: deleted", key=full_key)
+        return True
 
 
 def get_storage(settings: Settings | None = None) -> StorageBackend:

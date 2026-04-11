@@ -14,25 +14,25 @@ logger = structlog.get_logger()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # ai-service/
 REPORTS_DIR = BASE_DIR / "reports"
 
-REPORT_SYSTEM_PROMPT = """Bạn là chuyên gia phân tích marketing cao cấp chuyên về LinkedIn và lĩnh vực Công Nghệ. Hãy viết TOÀN BỘ báo cáo bằng tiếng Việt chuyên nghiệp.
-Báo cáo này sẽ được sử dụng để tạo nội dung LinkedIn trong lĩnh vực công nghệ — thought leadership, industry insights, và career development.
+REPORT_SYSTEM_PROMPT = """Bạn là chuyên gia phân tích marketing cao cấp chuyên về TikTok và lĩnh vực Công Nghệ. Hãy viết TOÀN BỘ báo cáo bằng tiếng Việt chuyên nghiệp.
+Báo cáo này sẽ được sử dụng để tạo nội dung TikTok trong lĩnh vực công nghệ — quick tips, trending breakdowns, hot takes, và tech insights.
 Dữ liệu nguồn từ Hacker News — cộng đồng công nghệ hàng đầu thế giới.
 
 Giữ nguyên tên công nghệ, thuật ngữ kỹ thuật, hashtag, URL, và các chỉ số dạng số bằng tiếng Anh gốc.
 
 Tạo báo cáo Markdown với CHÍNH XÁC các phần sau theo thứ tự:
 
-# Báo Cáo Xu Hướng Công Nghệ cho LinkedIn — {date}
+# Báo Cáo Xu Hướng Công Nghệ cho TikTok — {date}
 
 ## Tóm Tắt Tổng Quan
 - 3-5 câu tổng quan về bối cảnh xu hướng công nghệ hiện tại từ Hacker News
-- Nêu bật top 5 xu hướng, mỗi xu hướng một câu giải thích TẠI SAO chúng quan trọng cho chuyên gia công nghệ
-- Một nhận định then chốt cho chiến lược nội dung LinkedIn
+- Nêu bật top 5 xu hướng, mỗi xu hướng một câu giải thích TẠI SAO chúng thu hút cộng đồng tech
+- Một nhận định then chốt cho chiến lược nội dung TikTok
 
 ## Tổng Quan Thị Trường Công Nghệ
 - Phân tích phân bố danh mục công nghệ (AI/ML, Web Dev, DevOps, Security, etc.)
 - Tóm tắt phân tích cảm xúc (tâm trạng chung của cộng đồng tech)
-- Các chủ đề mới nổi mà chuyên gia công nghệ cần theo dõi trên LinkedIn
+- Các chủ đề mới nổi mà creator công nghệ cần theo dõi trên TikTok
 
 ## Bảng Xếp Hạng Xu Hướng
 
@@ -45,38 +45,38 @@ Tạo báo cáo Markdown với CHÍNH XÁC các phần sau theo thứ tự:
 Với mỗi xu hướng trong top 10 theo relevance_score:
 
 ### {rank}. {title}
-- **Điểm LinkedIn:** {score}/10 | **Vòng đời:** {lifecycle}
+- **Điểm TikTok:** {score}/10 | **Vòng đời:** {lifecycle}
 - **Danh mục:** {category} | **Cảm xúc:** {sentiment}
 - **HN Engagement:** {hn_score} points, {comments} comments
 - **Tại sao đang hot:** 2-3 câu phân tích tại sao xu hướng này thu hút cộng đồng tech
-- **Cơ hội LinkedIn:** 1-2 câu về cách tạo nội dung LinkedIn từ xu hướng này
+- **Cơ hội TikTok:** 1-2 câu về cách tạo nội dung TikTok từ xu hướng này
 
-## Gợi Ý Nội Dung LinkedIn
+## Gợi Ý Nội Dung TikTok
 
-Với mỗi xu hướng trong top 10, đề xuất 2-3 ý tưởng nội dung LinkedIn:
+Với mỗi xu hướng trong top 10, đề xuất 2-3 ý tưởng nội dung TikTok:
 
 ### {trend_title}
-1. **{content_type}** trên **LinkedIn**
+1. **{content_type}** trên **TikTok**
    - **Phong cách:** {writing_style}
-   - **Câu mở đầu:** "{một câu mở đầu/hook cụ thể cho LinkedIn, sẵn sàng sử dụng}"
+   - **Câu mở đầu:** "{một câu mở đầu/hook cụ thể cho TikTok, sẵn sàng sử dụng}"
    - **Mức tương tác dự kiến:** {high/medium/low}
    - **Tại sao hiệu quả:** 1 câu giải thích lý do
 
 Trong đó:
-- content_type: một trong linkedin_post, linkedin_article, linkedin_carousel, linkedin_poll, linkedin_document
-- writing_style: một trong thought_leadership, professional, storytelling, educational, data_driven
-- Câu mở đầu: Phải là câu cụ thể, hấp dẫn cho đối tượng chuyên gia công nghệ — KHÔNG dùng câu chung chung
+- content_type: một trong tiktok_video, tiktok_slideshow, tiktok_series, tiktok_duet, tiktok_stitch
+- writing_style: một trong quick_tips, hot_take, storytelling, educational, data_driven
+- Câu mở đầu: Phải là câu cụ thể, hấp dẫn cho đối tượng Gen-Z và tech enthusiast — KHÔNG dùng câu chung chung
 
 YÊU CẦU QUAN TRỌNG:
-- Tất cả gợi ý nội dung phải dành cho LinkedIn — KHÔNG đề xuất cho các nền tảng khác
-- Tập trung vào lĩnh vực Công Nghệ — thought leadership, industry insights, career advice
+- Tất cả gợi ý nội dung phải dành cho TikTok — KHÔNG đề xuất cho các nền tảng khác
+- Tập trung vào lĩnh vực Công Nghệ — quick tips, trending breakdowns, myth busting, behind-the-tech
 - Mọi câu mở đầu phải cụ thể và có thể sử dụng ngay — không dùng placeholder
 - Lý giải điểm số phải tham chiếu đến HN score và comments khi có
 - Nếu thiếu dữ liệu, hãy ghi nhận trung thực thay vì bịa số liệu"""
 
-CONTENT_ANGLES_SYSTEM_PROMPT = """Bạn là chuyên gia chiến lược nội dung LinkedIn trong lĩnh vực Công Nghệ. Dựa trên các chủ đề trending từ Hacker News, hãy tạo các gợi ý góc nội dung LinkedIn có cấu trúc.
+CONTENT_ANGLES_SYSTEM_PROMPT = """Bạn là chuyên gia chiến lược nội dung TikTok trong lĩnh vực Công Nghệ. Dựa trên các chủ đề trending từ Hacker News, hãy tạo các gợi ý góc nội dung TikTok có cấu trúc.
 
-Viết các giá trị "hook" và "rationale" bằng tiếng Việt tự nhiên, phù hợp với đối tượng chuyên gia công nghệ trên LinkedIn.
+Viết các giá trị "hook" và "rationale" bằng tiếng Việt tự nhiên, phù hợp với đối tượng Gen-Z và tech enthusiast trên TikTok.
 Giữ nguyên các giá trị enum (content_type, writing_style, estimated_engagement) bằng tiếng Anh.
 
 Trả về CHỈ một mảng JSON hợp lệ. Không markdown, không giải thích, chỉ mảng JSON.
@@ -84,17 +84,17 @@ Trả về CHỈ một mảng JSON hợp lệ. Không markdown, không giải th
 Mỗi phần tử phải có chính xác các trường sau:
 {
   "trend_title": "tiêu đề chính xác của xu hướng",
-  "platform": "linkedin",
-  "content_type": "linkedin_post|linkedin_article|linkedin_carousel|linkedin_poll|linkedin_document",
-  "writing_style": "thought_leadership|professional|storytelling|educational|data_driven",
-  "hook": "Một câu mở đầu cụ thể, hấp dẫn cho LinkedIn, sẵn sàng sử dụng — viết bằng tiếng Việt",
+  "platform": "tiktok",
+  "content_type": "tiktok_video|tiktok_slideshow|tiktok_series|tiktok_duet|tiktok_stitch",
+  "writing_style": "quick_tips|hot_take|storytelling|educational|data_driven",
+  "hook": "Một câu mở đầu cụ thể, hấp dẫn cho TikTok, sẵn sàng sử dụng — viết bằng tiếng Việt",
   "estimated_engagement": "high|medium|low",
-  "rationale": "Một câu giải thích tại sao góc nội dung này hiệu quả cho xu hướng này trên LinkedIn — viết bằng tiếng Việt"
+  "rationale": "Một câu giải thích tại sao góc nội dung này hiệu quả cho xu hướng này trên TikTok — viết bằng tiếng Việt"
 }
 
-Tạo 2-3 góc nội dung cho mỗi xu hướng. Mỗi góc nên sử dụng loại nội dung LinkedIn KHÁC NHAU.
+Tạo 2-3 góc nội dung cho mỗi xu hướng. Mỗi góc nên sử dụng loại nội dung TikTok KHÁC NHAU.
 Câu mở đầu phải cụ thể theo xu hướng — không dùng các cụm từ marketing chung chung.
-Tập trung vào thought leadership, industry insights, và professional development."""
+Tập trung vào quick tips, trending breakdowns, myth busting, và behind-the-tech content."""
 
 
 def _prepare_report_data(state: TrendScanState) -> dict:
@@ -237,12 +237,12 @@ def _generate_fallback_report(report_data: dict) -> str:
     all_trends = report_data["all_trends_for_table"]
 
     lines = [
-        f"# Báo Cáo Xu Hướng Công Nghệ cho LinkedIn — {today}",
+        f"# Báo Cáo Xu Hướng Công Nghệ cho TikTok — {today}",
         "",
         "## Tóm Tắt Tổng Quan",
         "",
         f"Báo cáo này bao gồm **{stats['total_items']} mục xu hướng công nghệ** "
-        f"từ Hacker News cho nội dung LinkedIn.",
+        f"từ Hacker News cho nội dung TikTok.",
         f"Điểm liên quan trung bình: **{stats['avg_relevance_score']}/10**.",
         "",
         "## Tổng Quan Thị Trường",

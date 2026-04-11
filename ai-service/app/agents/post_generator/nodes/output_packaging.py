@@ -15,13 +15,13 @@ from app.db.session import async_session_factory
 logger = structlog.get_logger()
 
 FORMAT_MAP = {
-    "thought_leadership": PostFormat.THOUGHT_LEADERSHIP,
+    "quick_tips": PostFormat.QUICK_TIPS,
     "hot_take": PostFormat.HOT_TAKE,
-    "case_study": PostFormat.CASE_STUDY,
-    "tutorial": PostFormat.TUTORIAL,
-    "industry_analysis": PostFormat.INDUSTRY_ANALYSIS,
-    "career_advice": PostFormat.CAREER_ADVICE,
-    "behind_the_scenes": PostFormat.BEHIND_THE_SCENES,
+    "trending_breakdown": PostFormat.TRENDING_BREAKDOWN,
+    "did_you_know": PostFormat.DID_YOU_KNOW,
+    "tutorial_hack": PostFormat.TUTORIAL_HACK,
+    "myth_busters": PostFormat.MYTH_BUSTERS,
+    "behind_the_tech": PostFormat.BEHIND_THE_TECH,
 }
 
 
@@ -93,7 +93,7 @@ def _build_final_output(state: PostGenState) -> dict:
             "trend_source": {
                 "trend_name": post.get("trend_title", ""),
                 "trend_url": post.get("trend_url", ""),
-                "linkedin_angle_used": post.get("linkedin_angle_used", ""),
+                "content_angle_used": post.get("content_angle_used", ""),
             },
             "format": post.get("format", ""),
             "target_audience": post.get("target_audience", []),
@@ -176,8 +176,8 @@ async def _persist_to_db(scan_run_id: str, final_output: dict) -> None:
                 return
 
             for post in final_output.get("posts", []):
-                fmt_str = post.get("format", "thought_leadership")
-                fmt = FORMAT_MAP.get(fmt_str, PostFormat.THOUGHT_LEADERSHIP)
+                fmt_str = post.get("format", "quick_tips")
+                fmt = FORMAT_MAP.get(fmt_str, PostFormat.QUICK_TIPS)
 
                 status = (
                     ContentStatus.FLAGGED_FOR_REVIEW
@@ -197,7 +197,7 @@ async def _persist_to_db(scan_run_id: str, final_output: dict) -> None:
                     image_prompt=post.get("image_prompt"),
                     trend_title=post.get("trend_source", {}).get("trend_name", "")[:500],
                     trend_url=post.get("trend_source", {}).get("trend_url"),
-                    linkedin_angle_used=post.get("trend_source", {}).get("linkedin_angle_used"),
+                    content_angle_used=post.get("trend_source", {}).get("content_angle_used"),
                     target_audience=post.get("target_audience", []),
                     word_count=metadata.get("word_count"),
                     estimated_read_time=metadata.get("estimated_read_time"),

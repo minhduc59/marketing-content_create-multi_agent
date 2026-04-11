@@ -1,4 +1,4 @@
-"""Phase 2: Content Generation — Generate LinkedIn posts from content plan."""
+"""Phase 2: Content Generation — Generate TikTok posts from content plan."""
 
 import json
 
@@ -36,14 +36,14 @@ def _build_brand_voice_instructions(strategy: dict) -> str:
         lines.append(f"Personality: {', '.join(voice['personality'])}")
     if voice.get("avoid"):
         lines.append(f"Avoid: {', '.join(voice['avoid'])}")
-    if voice.get("linkedin_persona"):
-        lines.append(f"Persona: {voice['linkedin_persona']}")
+    if voice.get("tiktok_persona"):
+        lines.append(f"Persona: {voice['tiktok_persona']}")
     if prefs.get("max_emojis"):
         lines.append(f"Max emojis per post: {prefs['max_emojis']}")
     if prefs.get("cta_style"):
         lines.append(f"Preferred CTA style: {prefs['cta_style']}")
 
-    return "\n".join(lines) if lines else "Professional, data-driven tech analyst tone."
+    return "\n".join(lines) if lines else "Energetic, casual, data-driven tech creator tone."
 
 
 def _build_generation_input(
@@ -68,7 +68,7 @@ def _build_generation_input(
                 "source_url": trend.get("source_url", ""),
                 "cleaned_content": (trend.get("cleaned_content") or "")[:3000],
                 "key_data_points": trend.get("key_data_points", []),
-                "linkedin_angles": trend.get("linkedin_angles", []),
+                "content_angles": trend.get("content_angles", []),
                 "target_audience": trend.get("target_audience", []),
                 "sentiment": trend.get("sentiment"),
                 "lifecycle": trend.get("lifecycle"),
@@ -114,7 +114,7 @@ def _build_revision_input(
                 "trend_data": {
                     "title": trend_data.get("title", ""),
                     "key_data_points": trend_data.get("key_data_points", []),
-                    "linkedin_angles": trend_data.get("linkedin_angles", []),
+                    "content_angles": trend_data.get("content_angles", []),
                     "cleaned_content": (trend_data.get("cleaned_content") or "")[:2000],
                 },
             })
@@ -123,7 +123,7 @@ def _build_revision_input(
 
 
 async def content_generation_node(state: PostGenState) -> dict:
-    """Phase 2: Generate LinkedIn posts (or revise failing ones)."""
+    """Phase 2: Generate TikTok posts (or revise failing ones)."""
     posts_to_revise = state.get("posts_to_revise", [])
     content_plan = state.get("content_plan", [])
     analyzed_trends = state.get("analyzed_trends", [])
