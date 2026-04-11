@@ -39,7 +39,7 @@ def get_analyzer_llm() -> ChatOpenAI:
 
 
 def get_content_gen_llm() -> ChatOpenAI:
-    """LLM for LinkedIn post generation — creative writing needs higher temperature."""
+    """LLM for TikTok post generation — creative writing needs higher temperature."""
     settings = get_settings()
     return ChatOpenAI(
         model="gpt-4o",

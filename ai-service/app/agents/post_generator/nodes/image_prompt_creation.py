@@ -49,7 +49,7 @@ async def image_prompt_creation_node(state: PostGenState) -> dict:
     system_prompt = IMAGE_PROMPT_SYSTEM_PROMPT
 
     user_content = (
-        f"Generate image prompts for these {len(post_summaries)} LinkedIn posts:\n\n"
+        f"Generate image prompts for these {len(post_summaries)} TikTok posts:\n\n"
         f"{json.dumps(post_summaries, indent=2)}"
     )
 

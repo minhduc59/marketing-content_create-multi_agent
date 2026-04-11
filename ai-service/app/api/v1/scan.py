@@ -18,13 +18,26 @@ router = APIRouter()
     response_model=ScanResponse,
     summary="Trigger a trend scan",
     description=(
-        "Start an async HackerNews technology trend scan. "
+        "Start an async HackerNews technology trend scan that crawls trending articles "
+        "and optionally generates TikTok content via the content generation agent.\n\n"
         "Returns immediately with a `scan_id` and `pending` status. "
         "Poll `GET /api/v1/scan/{scan_id}/status` to track progress.\n\n"
+        "**Pipeline:**\n"
+        "1. **Crawl** — fetch top HackerNews stories, extract articles, filter by tech relevance\n"
+        "2. **Analyze** — GPT-4o categorization, sentiment, lifecycle, TikTok relevance scoring\n"
+        "3. **Save content** — persist articles as markdown files\n"
+        "4. **Report** — generate Vietnamese TikTok trend report + content angles\n"
+        "5. **Generate posts** *(optional)* — auto-generate TikTok posts from top trends\n\n"
         "**Platform:** `hackernews`\n\n"
-        "**Options:**\n"
+        "**Scan options:**\n"
         "- `max_items_per_platform` — 1–200 items to fetch (default 50)\n"
-        "- `include_comments` — fetch top comments for each item (default true)"
+        "- `include_comments` — fetch top comments for each item (default true)\n"
+        "- `quality_threshold` — minimum quality score 1–10 to keep articles (default 5)\n"
+        "- `keywords` — target tech keywords for trend filtering\n\n"
+        "**Content generation options** (when `generate_posts=true`):\n"
+        "- `post_gen_options.num_posts` — number of posts to generate, 1–10 (default 3)\n"
+        "- `post_gen_options.formats` — allowed post formats "
+        "(e.g. `quick_tips`, `hot_take`, `trending_breakdown`). Null = all formats"
     ),
     responses={
         202: {"description": "Scan accepted and queued"},

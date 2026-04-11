@@ -24,11 +24,11 @@ router = APIRouter()
     "/generate",
     status_code=202,
     response_model=PostGenResponse,
-    summary="Generate LinkedIn posts from a completed scan",
+    summary="Generate TikTok posts from a completed scan",
     description=(
         "Triggers async post generation for a completed scan run. "
         "The pipeline reads analyzed trends and strategy, then generates "
-        "LinkedIn-ready posts with captions, hashtags, and image prompts.\n\n"
+        "TikTok-ready posts with captions, hashtags, and image prompts.\n\n"
         "Includes an auto-review loop that scores posts and revises "
         "those scoring below 7 (up to 2 revision cycles)."
     ),

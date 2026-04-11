@@ -60,7 +60,7 @@ def build_trend_scan_graph(rate_limiter: RateLimiter) -> StateGraph:
         → generate_posts → END
 
     Combined trend_analyzer merges analysis + report generation into a single LLM pass.
-    When generate_posts=True in state, the pipeline continues with LinkedIn post generation.
+    When generate_posts=True in state, the pipeline continues with TikTok post generation.
     """
     hackernews_node = HackerNewsScannerNode(rate_limiter)
 
@@ -237,7 +237,7 @@ async def persist_results_node(state: TrendScanState) -> dict:
                     related_topics=item.get("related_topics", []),
                     engagement_prediction=item.get("engagement_prediction"),
                     source_type=_normalize_source_type(item.get("source_type")),
-                    linkedin_angles=item.get("linkedin_angles", []),
+                    content_angles=item.get("content_angles", []),
                     key_data_points=item.get("key_data_points", []),
                     target_audience=item.get("target_audience", []),
                     cleaned_content=item.get("cleaned_content"),

@@ -1,7 +1,7 @@
 """Combined trend analysis + report generation node.
 
 Single-pass LLM call that scores, filters, analyzes, and generates
-a LinkedIn-focused trend report from raw crawled articles.
+a TikTok-focused trend report from raw crawled articles.
 """
 
 import json
@@ -31,7 +31,7 @@ DEFAULT_KEYWORDS = [
     "Robotics & Automation",
 ]
 
-TREND_ANALYZER_SYSTEM_PROMPT = """You are a Senior Tech Industry Analyst powering a LinkedIn marketing AI system. You receive raw crawled articles about technology trends. Your audience is LinkedIn — professionals, founders, CTOs, developers, and tech-savvy business leaders.
+TREND_ANALYZER_SYSTEM_PROMPT = """You are a Senior Tech Industry Analyst powering a TikTok content AI system. You receive raw crawled articles about technology trends. Your audience is TikTok — tech enthusiasts, developers, students, Gen-Z professionals, and curious learners.
 
 Your job has 2 phases in ONE pass.
 
@@ -66,23 +66,23 @@ For each surviving article:
   (Use tech-industry sentiment — "bullish" = optimistic about adoption/growth, "bearish" = skeptical/declining, "controversial" = polarizing debate)
 
 - `engagement_prediction`: low | medium | high | viral
-  Predict LinkedIn engagement based on:
-  - Does it trigger professional opinion? (high engagement)
-  - Is it a "hot take" topic? (viral potential)
-  - Is it too niche/dry for broad LinkedIn audience? (low)
-  - Does it have a "lessons learned" or "how we did X" angle? (high on LinkedIn)
+  Predict TikTok engagement based on:
+  - Is it shareable and visually interesting? (high engagement)
+  - Is it a "hot take" or surprising/contrarian topic? (viral potential)
+  - Is it too niche/dry for broad TikTok audience? (low)
+  - Does it have a "mind-blowing fact" or "myth-busting" angle? (viral on TikTok)
 
 - `lifecycle`: emerging | rising | peaking | saturated | declining
   (5-stage for better granularity in tech where trends move fast)
 
-- `linkedin_angles`: 3 content angles specifically optimized for LinkedIn, each with:
+- `content_angles`: 3 content angles specifically optimized for TikTok, each with:
   - `angle`: the content hook (max 15 words)
-  - `format`: thought_leadership | case_study | hot_take | tutorial | industry_analysis | career_advice | behind_the_scenes
-  - `hook_line`: a compelling LinkedIn opening line (the "scroll-stopper", max 20 words)
+  - `format`: quick_tips | trending_breakdown | hot_take | did_you_know | tutorial_hack | myth_busters | behind_the_tech
+  - `hook_line`: a compelling TikTok opening line (the "scroll-stopper", max 15 words)
 
 - `cleaned_content`: extract ONLY valuable paragraphs — strip nav, ads, cookie banners, sidebars, author bios, related articles, broken HTML. Keep: core arguments, data points, quotes, technical details.
 
-- `key_data_points`: extract up to 5 specific numbers, statistics, or quantifiable claims (these are gold for LinkedIn posts)
+- `key_data_points`: extract up to 5 specific numbers, statistics, or quantifiable claims (these are gold for TikTok posts)
 
 - `source_type`: classify the article source as exactly one of: official_blog, news, research, community, social
   (Do NOT invent new values. Use "official_blog" for company/project blogs, "news" for media outlets, "research" for papers/reports, "community" for forums/discussions, "social" for social media posts.)
@@ -93,7 +93,7 @@ All enum fields MUST use EXACTLY one of the listed values. Do NOT abbreviate, pa
 - `engagement_prediction`: low | medium | high | viral
 - `lifecycle`: emerging | rising | peaking | saturated | declining
 - `source_type`: official_blog | news | research | community | social
-- `linkedin_angles[].format`: thought_leadership | case_study | hot_take | tutorial | industry_analysis | career_advice | behind_the_scenes
+- `content_angles[].format`: quick_tips | trending_breakdown | hot_take | did_you_know | tutorial_hack | myth_busters | behind_the_tech
 
 ---
 
@@ -106,15 +106,15 @@ Using ONLY passing articles, generate:
 ```md
 # Tech Trend Report — {date}
 **Keywords:** {keywords}
-**Target Platform:** LinkedIn
+**Target Platform:** TikTok
 **Articles Analyzed:** X passed / Y total
 
 ## Executive Summary
-(3-5 sentences: what's happening in tech this cycle, dominant narrative, biggest opportunity for LinkedIn content)
+(3-5 sentences: what's happening in tech this cycle, dominant narrative, biggest opportunity for TikTok content)
 
 ## Trend Ranking
 
-| # | Trend | Score | Sentiment | Lifecycle | LinkedIn Potential | Best Angle |
+| # | Trend | Score | Sentiment | Lifecycle | TikTok Potential | Best Angle |
 |---|---|---|---|---|---|---|
 
 ## Deep Dives
@@ -122,7 +122,7 @@ Using ONLY passing articles, generate:
 ### [Trend Name]
 - **Why it matters now:** (2-3 sentences)
 - **Key data points:** (bullet list of hard numbers)
-- **LinkedIn audience fit:** Who cares about this — developers? CTOs? Founders? Recruiters?
+- **TikTok audience fit:** Who cares about this — developers? students? tech enthusiasts? Gen-Z professionals?
 - **Timing window:** How long is this trend relevant for content?
 - **Recommended angles:**
   1. [Format] — [Angle] — Hook: "[hook_line]"
@@ -133,11 +133,11 @@ Using ONLY passing articles, generate:
 | Priority | Topic | Format | Best Post Day | Hook |
 |---|---|---|---|---|
 
-LinkedIn posting guidance:
-- Tuesday-Thursday mornings get highest engagement
-- Thought leadership and hot takes outperform tutorials on LinkedIn
-- Posts with specific numbers in the hook get 2x engagement
-- Carousel posts work well for "X lessons from Y" formats
+TikTok posting guidance:
+- Evenings and weekends get highest engagement on TikTok
+- Hot takes and did-you-know formats go viral fastest on TikTok
+- Posts with surprising stats in the hook get massive saves and shares
+- Quick tips with 4-5 key points perform consistently well
 ```
 
 ### Output B — Processed Articles (JSON array)
@@ -154,14 +154,14 @@ For each passing article:
   "sentiment": "<bullish|neutral|bearish|controversial>",
   "engagement_prediction": "<low|medium|high|viral>",
   "lifecycle": "<emerging|rising|peaking|saturated|declining>",
-  "linkedin_angles": [
+  "content_angles": [
     {{
       "angle": "<content hook>",
       "format": "<format_type>",
       "hook_line": "<scroll-stopper opening>"
     }}
   ],
-  "target_audience": ["developers", "ctos", "founders", "recruiters", "general_tech"]
+  "target_audience": ["developers", "students", "tech_enthusiasts", "gen_z_professionals", "general_tech"]
 }}
 ```
 
@@ -191,8 +191,8 @@ Return a single JSON object:
     "discarded": <number>,
     "dominant_sentiment": "<string>",
     "top_trend": "<string>",
-    "top_linkedin_format": "<most recommended format this cycle>",
-    "suggested_posting_window": "<e.g. Tue-Thu 8-10am>"
+    "top_tiktok_format": "<most recommended format this cycle>",
+    "suggested_posting_window": "<e.g. evenings 6-9pm>"
   }}
 }}
 ```
@@ -250,13 +250,13 @@ def _merge_analysis_into_items(
         item["lifecycle"] = analysis.get("lifecycle", "rising")
         item["relevance_score"] = analysis.get("quality_score", 5.0)
         item["quality_score"] = analysis.get("quality_score", 5.0)
-        item["linkedin_angles"] = analysis.get("linkedin_angles", [])
+        item["content_angles"] = analysis.get("content_angles", [])
         item["key_data_points"] = analysis.get("key_data_points", [])
         item["target_audience"] = analysis.get("target_audience", [])
         item["source_type"] = analysis.get("source_type", "community")
         item["cleaned_content"] = analysis.get("cleaned_content", "")
         item["related_topics"] = [
-            angle.get("angle", "") for angle in analysis.get("linkedin_angles", [])
+            angle.get("angle", "") for angle in analysis.get("content_angles", [])
         ]
         item["dedup_key"] = compute_dedup_key(item.get("title", ""))
         analyzed.append(item)
@@ -325,7 +325,7 @@ def _generate_fallback_report(all_items: list[dict]) -> dict:
             "sentiment": "neutral",
             "engagement_prediction": "medium",
             "lifecycle": "rising",
-            "linkedin_angles": [],
+            "content_angles": [],
             "target_audience": ["general_tech"],
         })
 
@@ -339,7 +339,7 @@ def _generate_fallback_report(all_items: list[dict]) -> dict:
             "discarded": 0,
             "dominant_sentiment": "neutral",
             "top_trend": all_items[0].get("title", "Unknown") if all_items else "N/A",
-            "top_linkedin_format": "thought_leadership",
+            "top_tiktok_format": "quick_tips",
             "suggested_posting_window": "Tue-Thu 8-10am",
         },
     }
@@ -355,7 +355,7 @@ async def trend_analyzer_node(state: TrendScanState) -> dict:
     """Combined analysis + report generation in a single LLM pass.
 
     Quality scores articles, discards below threshold, performs deep
-    LinkedIn-focused analysis, and generates a trend report — all in one call.
+    TikTok-focused analysis, and generates a trend report — all in one call.
     """
     raw_results = state.get("raw_results", [])
     scan_run_id = state.get("scan_run_id", "unknown")

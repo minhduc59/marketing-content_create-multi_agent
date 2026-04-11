@@ -1,7 +1,7 @@
 [project]
 name = "trending-scanner"
 version = "0.2.0"
-description = "AI-powered HackerNews technology trend scanner for LinkedIn content"
+description = "AI-powered HackerNews technology trend scanner for TikTok content"
 requires-python = ">=3.11"
 dependencies = [
     # Web framework
@@ -37,6 +37,9 @@ dependencies = [
 
     # Cloud storage (S3 for production)
     "boto3>=1.35.0",
+
+    # Encryption (token management)
+    "cryptography>=43.0.0",
 ]
 
 [project.optional-dependencies]

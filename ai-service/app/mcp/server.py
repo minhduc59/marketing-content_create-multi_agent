@@ -7,8 +7,8 @@ from mcp.server.fastmcp import FastMCP
 
 # Create MCP server
 mcp = FastMCP(
-    "LinkedIn Tech Trend Scanner",
-    instructions="Tools for crawling trending technology content from HackerNews for LinkedIn",
+    "TikTok Tech Trend Scanner",
+    instructions="Tools for crawling trending technology content from HackerNews for TikTok",
 )
 
 

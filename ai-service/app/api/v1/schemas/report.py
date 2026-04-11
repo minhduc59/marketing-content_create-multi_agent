@@ -4,10 +4,10 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class LinkedInAngleReport(BaseModel):
+class ContentAngleReport(BaseModel):
     angle: str = Field(description="Content hook (max 15 words)")
-    format: str = Field(description="Format: thought_leadership, case_study, hot_take, tutorial, industry_analysis, career_advice, behind_the_scenes")
-    hook_line: str = Field(description="Scroll-stopper opening line (max 20 words)")
+    format: str = Field(description="Format: quick_tips, trending_breakdown, hot_take, did_you_know, tutorial_hack, myth_busters, behind_the_tech")
+    hook_line: str = Field(description="Scroll-stopper opening line (max 15 words)")
 
 
 class ProcessedArticle(BaseModel):
@@ -21,7 +21,7 @@ class ProcessedArticle(BaseModel):
     sentiment: str
     engagement_prediction: str
     lifecycle: str
-    linkedin_angles: list[LinkedInAngleReport] = []
+    content_angles: list[ContentAngleReport] = []
     target_audience: list[str] = []
 
 
@@ -38,7 +38,7 @@ class AnalysisMeta(BaseModel):
     discarded: int = 0
     dominant_sentiment: str = ""
     top_trend: str = ""
-    top_linkedin_format: str = ""
+    top_tiktok_format: str = ""
     suggested_posting_window: str = ""
 
 

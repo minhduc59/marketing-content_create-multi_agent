@@ -54,7 +54,7 @@ class PostDetail(BaseModel):
     image_prompt: dict | None
     trend_title: str
     trend_url: str | None
-    linkedin_angle_used: str | None
+    content_angle_used: str | None
     target_audience: list[str]
     word_count: int | None
     estimated_read_time: str | None

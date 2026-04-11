@@ -10,6 +10,7 @@ logger = structlog.get_logger()
 # Platform rate limits: (max_requests, window_seconds)
 PLATFORM_LIMITS: dict[str, tuple[int, int]] = {
     "hackernews": (30, 60),          # HN Firebase API: ~30 req/min to be polite
+    "tiktok": (6, 60),               # TikTok Content Posting API: 6 req/min per token
 }
 
 
