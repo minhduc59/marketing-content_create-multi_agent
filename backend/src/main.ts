@@ -9,6 +9,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const config = app.get(ConfigService);
 
+  app.setGlobalPrefix('v1');
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

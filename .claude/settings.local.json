@@ -6,7 +6,8 @@
       "Bash(done)",
       "Bash(uvicorn --version)",
       "Bash(curl -s http://127.0.0.1:8000/api/v1/scan/38775c44-d488-4df1-b88e-5f3947b288f5/status)",
-      "Bash(/usr/local/bin/python3.11 -c \":*)"
+      "Bash(/usr/local/bin/python3.11 -c \":*)",
+      "mcp__code-review-graph__get_architecture_overview_tool"
     ]
   },
   "disabledMcpjsonServers": [

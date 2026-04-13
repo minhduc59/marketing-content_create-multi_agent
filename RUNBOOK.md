@@ -129,78 +129,70 @@ If you get **P3005 "database schema is not empty"** on a fresh clone, follow [Ap
 ---
 
 ## 4. Start the services
-Two ways to develop                             
-                                          
-Option A: Docker only (simpler)
-                                                    
-# Start everything
-docker compose up -d                              
-                                                  
-# See logs in real-time (like a terminal)
-docker compose logs -f ai-service backend         
-                                              
-# See only ai-service logs                        
-docker compose logs -f ai-service               
-                                                    
-# See only backend logs                 
-docker compose logs -f backend                    
-                                                    
-# Restart after code changes (ai-service auto-reloads via volume mount)                    
-docker compose restart backend                  
-                                                    
+
+Two ways to develop.
+
+### Option A — Docker only (simpler)
+
+```bash
+# Start everything (ai-service + backend + infra)
+docker compose up -d
+
+# See logs in real-time
+docker compose logs -f ai-service backend
+
+# See only ai-service logs
+docker compose logs -f ai-service
+
+# See only backend logs
+docker compose logs -f backend
+
+# Restart after code changes (ai-service auto-reloads via volume mount)
+docker compose restart backend
+
 # Stop everything
-docker compose down                               
-                                                  
-  Option B: Local dev (better for debugging — 
-  recommended)                            
+docker compose down
+```
 
-  # Only start infra (database + redis) via Docker  
-  docker compose up -d postgres redis
-                                                    
-  # Stop the app containers so they don't steal   
-  ports
-  docker compose stop ai-service backend            
-                                              
-  # Terminal 1 — ai-service (logs visible here)     
-  cd ai-service                                   
-  uvicorn app.main:app --reload --port 8000         
-                                              
-  # Terminal 2 — backend (logs visible here)        
-  cd backend                                      
-  npm run start:dev                                 
-   
-  This gives you live logs in each terminal,        
-  hot-reload on save, and easier debugging.       
+> **Note:** Frontend is not in docker-compose — start it separately (see below).
 
-  Key commands cheat sheet                          
-                                          
-  ┌────────────────────────┬─────────────────────┐  
-  │        Command         │    What it does     │  
-  ├────────────────────────┼─────────────────────┤
-  │ docker compose up -d   │ Start only DB +     │  
-  │ postgres redis         │ Redis               │
-  ├────────────────────────┼─────────────────────┤
-  │ docker compose stop    │ Free up ports       │
-  │ ai-service backend     │ 8000/3000           │
-  ├────────────────────────┼─────────────────────┤  
-  │ docker compose up -d   │ Start everything in │
-  │                        │  background         │  
-  ├────────────────────────┼─────────────────────┤
-  │ docker compose logs -f │ Stream ai-service   │
-  │  ai-service            │ logs                │
-  ├────────────────────────┼─────────────────────┤
-  │ docker compose logs -f │ Stream backend logs │
-  │  backend               │                     │  
-  ├────────────────────────┼─────────────────────┤
-  │ docker compose restart │ Restart after       │  
-  │  ai-service            │ changes             │
-  ├────────────────────────┼─────────────────────┤
-  │ docker compose down    │ Stop and remove all │
-  │                        │  containers         │  
-  ├────────────────────────┼─────────────────────┤
-  │ docker compose ps      │ Show running        │  
-  │                        │ containers + ports  │
-  └────────────────────────┴─────────────────────┘
+### Option B — Local dev (better for debugging — recommended)
+
+```bash
+# Only start infra (database + redis) via Docker
+docker compose up -d postgres redis
+
+# Stop the app containers so they don't steal ports
+docker compose stop ai-service backend
+
+# Terminal 1 — ai-service (logs visible here)
+cd ai-service
+uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 — backend (logs visible here)
+cd backend
+npm run start:dev
+
+# Terminal 3 — frontend (logs visible here)
+cd frontend
+npm run dev
+```
+
+This gives you live logs in each terminal, hot-reload on save, and easier debugging.
+
+### Key commands cheat sheet
+
+| Command | What it does |
+|---------|-------------|
+| `docker compose up -d postgres redis` | Start only DB + Redis |
+| `docker compose stop ai-service backend` | Free up ports 8000/3000 |
+| `docker compose up -d` | Start everything in background |
+| `docker compose logs -f ai-service` | Stream ai-service logs |
+| `docker compose logs -f backend` | Stream backend logs |
+| `docker compose restart ai-service` | Restart after changes |
+| `docker compose down` | Stop and remove all containers |
+| `docker compose ps` | Show running containers + ports |
+| `cd frontend && npm run dev` | Start frontend on :3001 |
 
 ---
 
@@ -209,10 +201,10 @@ docker compose down
 ```bash
 # 1. Health checks
 curl http://localhost:8000/health          # {"status":"ok","service":"trending-scanner"}
-curl http://localhost:3000/health          # {"status":"ok","service":"backend-gateway"}
+curl http://localhost:3000/v1/health       # {"status":"ok","service":"backend-gateway"}
 
 # 2. Register a user
-curl -s -X POST http://localhost:3000/auth/register \
+curl -s -X POST http://localhost:3000/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"demo@local.dev","password":"password123","displayName":"Demo"}'
 # → { "accessToken": "...", "refreshToken": "..." }
@@ -220,10 +212,10 @@ curl -s -X POST http://localhost:3000/auth/register \
 ACCESS=<paste accessToken here>
 
 # 3. Get profile
-curl http://localhost:3000/auth/me -H "Authorization: Bearer $ACCESS"
+curl http://localhost:3000/v1/auth/me -H "Authorization: Bearer $ACCESS"
 
 # 4. Trigger a scan (proxied to ai-service)
-curl -s -X POST http://localhost:3000/scans \
+curl -s -X POST http://localhost:3000/v1/scans \
   -H "Authorization: Bearer $ACCESS" \
   -H 'Content-Type: application/json' \
   -d '{"platforms":["hackernews"],"max_items_per_platform":10}'
@@ -232,6 +224,10 @@ curl -s -X POST http://localhost:3000/scans \
 #    npm i -g wscat
 wscat -c "ws://localhost:3000/ws?token=$ACCESS"
 > {"event":"subscribe","data":{"resource":"scan","id":"<scan_id>"}}
+
+# 6. Frontend (if running locally)
+open http://localhost:3001          # Should show login page
+# Log in with demo@local.dev / password123
 ```
 
 ---
@@ -248,6 +244,9 @@ wscat -c "ws://localhost:3000/ws?token=$ACCESS"
 | Run ai-service tests | `cd ai-service && pytest` |
 | Lint ai-service | `cd ai-service && ruff check . && mypy --strict .` |
 | Lint backend | `cd backend && npm run lint` |
+| Start frontend | `cd frontend && npm run dev` |
+| Build frontend | `cd frontend && npm run build` |
+| Lint frontend | `cd frontend && npm run lint` |
 
 ### Schema changes
 
