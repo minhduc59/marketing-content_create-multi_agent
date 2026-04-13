@@ -34,7 +34,7 @@ class TrendItem(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     scan_run_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("scan_runs.id"), index=True
+        ForeignKey("ai.scan_runs.id"), index=True
     )
 
     # Core
@@ -119,4 +119,5 @@ class TrendItem(Base):
         Index("ix_trend_items_platform_category", "platform", "category"),
         Index("ix_trend_items_discovered", "discovered_at"),
         Index("ix_trend_items_score", "relevance_score"),
+        {"schema": "ai"},
     )

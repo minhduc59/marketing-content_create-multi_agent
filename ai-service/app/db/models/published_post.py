@@ -11,15 +11,19 @@ from app.db.models.enums import PublishMode, PublishStatus
 
 class PublishedPost(Base):
     __tablename__ = "published_posts"
+    __table_args__ = {"schema": "ai"}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     content_post_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("content_posts.id", ondelete="CASCADE"),
+        ForeignKey("ai.content_posts.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    published_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
     )
     platform: Mapped[str] = mapped_column(
         String(20), nullable=False, default="tiktok"

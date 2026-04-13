@@ -22,10 +22,6 @@ class Settings(BaseSettings):
     # Firecrawl
     FIRECRAWL_API_KEY: str = ""
 
-    # BFL (Black Forest Labs) — FLUX image generation
-    BFL_API_KEY: str = ""
-    BFL_API_BASE_URL: str = "https://api.bfl.ai/v1"
-
     # S3 (production storage)
     S3_BUCKET: str = ""
     S3_REGION: str = "ap-southeast-1"
@@ -49,6 +45,13 @@ class Settings(BaseSettings):
     # Golden Hour
     DEFAULT_GOLDEN_HOURS: str = "07:00,12:00,19:00"
     TIMEZONE: str = "Asia/Ho_Chi_Minh"
+
+    # Backend gateway (NestJS). ai-service only trusts requests that carry
+    # the shared internal API key + an X-User-Id header; direct external
+    # callers are rejected except for the TikTok OAuth callback.
+    BACKEND_ORIGIN: str = "http://localhost:3000"
+    INTERNAL_API_KEY: str = ""
+    REQUIRE_INTERNAL_AUTH: bool = False
 
     @property
     def is_production(self) -> bool:

@@ -12,15 +12,19 @@ from app.db.models.enums import ContentStatus, PostFormat
 
 class ContentPost(Base):
     __tablename__ = "content_posts"
+    __table_args__ = {"schema": "ai"}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     scan_run_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("scan_runs.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("ai.scan_runs.id"), nullable=False, index=True
     )
     trend_item_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("trend_items.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("ai.trend_items.id"), nullable=True
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
     )
 
     # Content

@@ -11,12 +11,17 @@ from app.db.models.enums import ScanStatus
 
 class ScanRun(Base):
     __tablename__ = "scan_runs"
+    __table_args__ = {"schema": "ai"}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    triggered_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     status: Mapped[ScanStatus] = mapped_column(
-        Enum(ScanStatus), default=ScanStatus.PENDING
+        Enum(ScanStatus, values_callable=lambda e: [m.value for m in e]),
+        default=ScanStatus.PENDING,
     )
     platforms_requested: Mapped[list] = mapped_column(JSON, default=list)
     platforms_completed: Mapped[list] = mapped_column(JSON, default=list)

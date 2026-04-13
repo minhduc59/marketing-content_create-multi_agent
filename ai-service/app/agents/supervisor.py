@@ -109,14 +109,23 @@ async def generate_posts_node(state: TrendScanState) -> dict:
         logger.error("generate_posts: no scan_run_id")
         return {"post_gen_output": {}}
 
+    # Retrieve the owning user from the scan run so content_posts.created_by
+    # is populated and the NestJS gateway can filter posts by user.
+    user_id: str | None = None
+    async with async_session_factory() as db:
+        row = await db.get(ScanRun, scan_run_id)
+        if row and row.triggered_by:
+            user_id = str(row.triggered_by)
+
     logger.info(
         "generate_posts: starting post generation pipeline",
         scan_run_id=scan_run_id,
+        user_id=user_id,
         options=post_gen_options,
     )
 
     try:
-        output = await run_post_generation(scan_run_id, post_gen_options)
+        output = await run_post_generation(scan_run_id, post_gen_options, user_id=user_id)
 
         total_posts = len(output.get("posts", []))
         logger.info(

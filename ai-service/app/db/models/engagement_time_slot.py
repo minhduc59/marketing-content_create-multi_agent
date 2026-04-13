@@ -38,4 +38,5 @@ class EngagementTimeSlot(Base):
 
     __table_args__ = (
         UniqueConstraint("platform", "slot_index", name="uq_platform_slot_index"),
+        {"schema": "ai"},
     )

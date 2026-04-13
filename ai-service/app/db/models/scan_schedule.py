@@ -10,9 +10,13 @@ from app.db.base import Base
 
 class ScanSchedule(Base):
     __tablename__ = "scan_schedules"
+    __table_args__ = {"schema": "ai"}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
     )
     cron_expression: Mapped[str] = mapped_column(String(100))
     platforms: Mapped[list] = mapped_column(JSON, default=list)

@@ -15,7 +15,11 @@ from app.db.session import async_session_factory
 logger = structlog.get_logger()
 
 
-async def run_post_generation(scan_run_id: str, options: dict | None = None) -> dict:
+async def run_post_generation(
+    scan_run_id: str,
+    options: dict | None = None,
+    user_id: str | None = None,
+) -> dict:
     """Execute the post generation pipeline for a completed scan run.
 
     Args:
@@ -23,6 +27,9 @@ async def run_post_generation(scan_run_id: str, options: dict | None = None) -> 
         options: Optional configuration:
             - num_posts: Number of posts to generate (default 3, max 10)
             - formats: List of allowed post formats (default: all)
+        user_id: UUID of the user triggering generation — propagated
+            through LangGraph state so persisted ContentPost rows carry
+            the owning user.
 
     Returns:
         The final_output dict containing content_plan, posts, and strategy_update.
@@ -36,6 +43,7 @@ async def run_post_generation(scan_run_id: str, options: dict | None = None) -> 
     logger.info(
         "post_generation: starting",
         scan_run_id=scan_run_id,
+        user_id=user_id,
         options=options,
     )
 
@@ -60,6 +68,7 @@ async def run_post_generation(scan_run_id: str, options: dict | None = None) -> 
 
     initial_state = PostGenState(
         scan_run_id=scan_run_id,
+        user_id=user_id,
         options={
             "num_posts": min(options.get("num_posts", 3), 10),
             "formats": options.get("formats"),

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,6 +13,9 @@ class UserPlatformToken(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
     )
     platform: Mapped[str] = mapped_column(
         String(20), nullable=False, default="tiktok"
@@ -42,7 +45,6 @@ class UserPlatformToken(Base):
     )
 
     __table_args__ = (
-        # Single-user dev mode: one token per platform.
-        # Add user_id to unique constraint when multi-user support is added.
-        {"sqlite_autoincrement": True},
+        UniqueConstraint("user_id", "platform", name="uq_user_platform_tokens_user_platform"),
+        {"schema": "ai"},
     )

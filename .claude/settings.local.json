@@ -10,6 +10,7 @@
     ]
   },
   "disabledMcpjsonServers": [
-    "hackernews"
+    "hackernews",
+    "code-review-graph"
   ]
 }
