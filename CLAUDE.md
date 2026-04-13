@@ -4,107 +4,203 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-AI-powered HackerNews technology trend scanner for LinkedIn content creation (thesis project). Only `ai-service/` is active; `backend/` (NestJS) and `frontend/` (Next.js 15) are planned for future sprints.
+AI-powered technology trend scanner and TikTok content pipeline (thesis project). Three-tier architecture: **Frontend** (Next.js 14) + **Backend** (NestJS) + **AI Service** (FastAPI + LangGraph).
 
-**Focus:** LinkedIn platform, Technology domain, HackerNews as sole data source.
+**Data source:** HackerNews | **Target platform:** TikTok | **Domain:** Technology
 
 ## Commands
 
-```bash
-# Infrastructure
-docker-compose up -d postgres redis       # Start PostgreSQL 16 + Redis 7
+### AI Service (FastAPI — `ai-service/`)
 
-# Setup
+```bash
 cd ai-service
 pip install -e ".[dev]"                    # Install with dev dependencies
 alembic upgrade head                       # Run database migrations
+uvicorn app.main:app --reload --port 8000  # Start dev server
 
-# Development
-uvicorn app.main:app --reload --port 8000
-
-# Testing
+# Testing & code quality
 pytest tests/                              # All tests
 pytest tests/unit_tests/                   # Unit tests only
 pytest tests/integration_tests/            # Integration tests only
-pytest tests/unit_tests/test_foo.py -k "test_name"  # Single test
-
-# Code quality
 ruff check .                               # Linting (line-length=100, py311)
 mypy --strict .                            # Type checking
 ```
 
+### Backend (NestJS — `backend/`)
+
+```bash
+cd backend
+npm install                                # Install dependencies
+npx prisma generate                        # Generate Prisma client
+npx prisma migrate deploy                  # Run migrations
+npm run start:dev                          # Start dev server (port 3000)
+
+# Testing & code quality
+npm run test                               # Jest tests
+npm run lint                               # ESLint
+```
+
+### Frontend (Next.js — `frontend/`)
+
+```bash
+cd frontend
+npm install                                # Install dependencies
+npm run dev                                # Start dev server (port 3001)
+npm run build                              # Production build
+npm run lint                               # ESLint
+```
+
+### Infrastructure
+
+```bash
+docker compose up -d postgres redis        # Start PostgreSQL 16 + Redis 7
+docker compose up -d                       # Start all services (includes ai-service + backend)
+```
+
+See [RUNBOOK.md](RUNBOOK.md) for full setup guide including DB role bootstrap and Prisma baseline.
+
 ## Architecture
 
-### LangGraph Agent Pipeline
+### LangGraph Pipelines
 
-The core is a linear LangGraph `StateGraph` in `app/agents/supervisor.py`:
+Three LangGraph pipelines in `ai-service/app/agents/`:
 
+**Pipeline 1 — Trend Scanning** (`supervisor.py`):
 ```
-START → hackernews_scanner → collect_results → analyzer → content_saver → reporter → persist_results → END
+START → hackernews_scanner → collect_results → trend_analyzer → content_saver → persist_results → [conditional] → END
+                                                                                                      ↓ (if generate_posts=true)
+                                                                                                  generate_posts_node → END
 ```
 
-- **Shared state** (`TrendScanState` TypedDict in `app/agents/state.py`): uses `operator.add` annotation on `raw_results` and `errors` for fan-in merging
-- **Scanner node** (`app/agents/scanners/hackernews.py`): inherits `BaseScannerNode` (ABC) which handles rate limiting, caching, and error wrapping. Crawls top HN stories, extracts full article text, filters for tech relevance.
-- **Analyzer** (`app/agents/analyzer.py`): chunks items into batches of 40 for GPT-4o analysis (category, sentiment, lifecycle, relevance_score for LinkedIn audience).
-- **Content Saver** (`app/agents/content_saver.py`): saves articles as markdown files to `content/hackernews/{date}/`.
-- **Reporter** (`app/agents/reporter.py`): two separate LLM calls — one for Vietnamese markdown report focused on LinkedIn tech content, one for structured content angles JSON. Reports saved to `reports/{scan_run_id}/`.
-- **Persist**: saves analyzed trends to PostgreSQL via SQLAlchemy async.
+**Pipeline 2 — Post Generation** (`post_generator/graph.py`):
+```
+START → strategy_alignment → content_generation → image_prompt_creation → image_generation → auto_review → [review_router] → output_packaging → END
+                                  ↑                                                                            ↓ (score < 7 & revision < 2)
+                                  └────────────────────────────────────────────────────────────────────────── revise
+```
+
+**Pipeline 3 — Publish Post** (`publish_post/graph.py`):
+```
+START → resolve_and_validate → golden_hour → scheduler → [conditional] → END
+                                                              ↓ (publish_now)
+                                                          publish_node → END
+```
 
 ### LLM Configuration
 
-LLM clients in `app/clients/openai_client.py` use `langchain-openai` `ChatOpenAI`:
-- `get_llm()` — gpt-4o, max_tokens=4096, temperature=0 (analyzer)
-- `get_report_llm()` — gpt-4o, max_tokens=8192, temperature=0.3 (reporter)
+LLM clients in `app/clients/openai_client.py` (all GPT-4o via `langchain-openai`):
 
-### Platform Tool
-
-`app/tools/hackernews_tool.py` — Firebase API wrapper for Hacker News; crawls article URLs, extracts HTML to text, filters non-tech content.
-
-All tools use `@with_retry` decorator from `app/core/retry.py` (tenacity-based, exponential backoff).
+| Function | Max Tokens | Temp | Used By |
+|----------|-----------|------|---------|
+| `get_llm()` | 4,096 | 0.0 | General tasks |
+| `get_analyzer_llm()` | 16,384 | 0.1 | `trend_analyzer` |
+| `get_report_llm()` | 8,192 | 0.3 | Reporter |
+| `get_content_gen_llm()` | 8,192 | 0.7 | `strategy_alignment`, `content_generation` |
+| `get_review_llm()` | 4,096 | 0.1 | `auto_review`, `image_prompt_creation` |
 
 ### Infrastructure Layer (`app/core/`)
 
-- **Cache** (`cache.py`): Redis JSON cache with `cache:` key prefix, 30-min TTL
-- **Rate Limiter** (`rate_limiter.py`): Redis sorted-set sliding window. HackerNews: 30 req/60s
-- **Dedup** (`dedup.py`): `compute_dedup_key()` = SHA256 of first 100 normalized title chars (16-char hex). `titles_are_similar()` = Jaccard coefficient on word sets
+- **Cache** (`cache.py`): Redis JSON cache, `cache:` key prefix, 30-min TTL
+- **Rate Limiter** (`rate_limiter.py`): Redis sorted-set sliding window (HN: 30 req/60s)
+- **Dedup** (`dedup.py`): SHA256 of first 100 normalized title chars + Jaccard similarity
+- **Storage** (`storage.py`): Local filesystem / S3 abstraction for reports, posts, images
+- **Retry** (`retry.py`): `@with_retry` decorator (tenacity exponential backoff)
 - **Exceptions** (`exceptions.py`): `ScannerError` base → `RateLimitError`, `ApiError`, `ScraperError`
 
 ### Database
 
-SQLAlchemy 2.0 async + asyncpg. Models in `app/db/models/`:
-- **ScanRun**: scan lifecycle (PENDING→RUNNING→COMPLETED/PARTIAL/FAILED), tracks duration, report path
-- **TrendItem**: content + engagement metrics + AI analysis fields (category, sentiment, lifecycle, relevance_score, dedup_key)
-- **TrendComment**: comments collected per trend item
+**Multi-schema PostgreSQL** with role-based access:
+- `ai` schema (Alembic-managed, owned by `ai_svc`): trend data + content pipeline
+- `app` schema (Prisma-managed, owned by `backend_svc`): users + auth
+
+**AI schema models** (SQLAlchemy 2.0 async, `app/db/models/`):
+- **ScanRun**: scan lifecycle (PENDING→RUNNING→COMPLETED/PARTIAL/FAILED)
+- **TrendItem**: content + engagement metrics + AI analysis (category, sentiment, lifecycle, relevance_score, quality_score)
+- **TrendComment**: comments per trend item
+- **ContentPost**: generated posts (caption, hashtags, CTA, image_prompt, review_score, status)
+- **PublishedPost**: publish tracking (TikTok publish_id, golden_hour_slot, status, retry_count)
+- **UserPlatformToken**: encrypted OAuth tokens (Fernet)
+- **EngagementTimeSlot**: golden hour engagement data per platform
 - **ScanSchedule**: cron expressions for scheduled scans
 
-Enums in `app/db/models/enums.py`: `ScanStatus`, `Platform` (HACKERNEWS only), `Sentiment`, `TrendLifecycle`.
+**App schema models** (Prisma, `backend/prisma/schema.prisma`):
+- **User**: email, passwordHash, displayName, role (admin/user)
+- **AuthIdentity**: provider (local/google), providerUserId
+- **RefreshToken**: JWT refresh token tracking
+- **AuditLog**: action logging
 
-### API Endpoints (`app/api/v1/`)
+Key enums: `ScanStatus`, `Platform` (hackernews), `Sentiment`, `TrendLifecycle`, `ContentStatus`, `PostFormat` (7 formats), `PublishStatus`, `PublishMode`
 
-- `POST /api/v1/scan` — trigger async HackerNews scan (returns 202)
+### API Endpoints
+
+**AI Service** (`app/api/v1/` — port 8000):
+- `POST /api/v1/scan` — trigger async scan (202)
 - `GET /api/v1/scan/{scan_id}/status` — poll scan progress
-- `GET /api/v1/trends` — list with filters (category, sentiment, lifecycle, min_score) + pagination
-- `GET /api/v1/trends/top` — top trends by time window (24h/7d/30d)
-- `GET /api/v1/trends/{trend_id}` — full detail with comments
-- `POST /api/v1/scan/schedule` — create cron schedule
-- `GET /api/v1/scan/schedule` — list schedules
-- `GET /api/v1/reports` — list generated reports
-- `GET /api/v1/reports/{scan_run_id}` — full markdown report
-- `GET /api/v1/reports/{scan_run_id}/summary` — JSON summary with stats + LinkedIn content angles
+- `GET /api/v1/trends` — list with filters + pagination
+- `GET /api/v1/trends/top` — top trends by time window
+- `GET /api/v1/trends/{trend_id}` — full detail
+- `POST/GET /api/v1/scan/schedule` — cron schedule management
+- `GET /api/v1/reports` / `GET /api/v1/reports/{scan_run_id}` — reports
+- `POST /api/v1/posts/generate` — trigger post generation (202)
+- `GET /api/v1/posts` / `GET /api/v1/posts/{id}` — list/detail posts
+- `PATCH /api/v1/posts/{id}/status` — update post status
+- `POST /api/v1/publish/{id}` — publish to TikTok
+- `GET /api/v1/auth/tiktok/login` — TikTok OAuth redirect
+- `GET /api/v1/auth/tiktok/callback` — TikTok OAuth callback
+
+**Backend Gateway** (NestJS — port 3000, global prefix `/v1`, JWT required unless noted):
+- `POST /v1/auth/register` — register (public)
+- `POST /v1/auth/login` — login (public)
+- `POST /v1/auth/refresh` — rotate tokens (public)
+- `POST /v1/auth/logout` — revoke token
+- `GET /v1/auth/me` — current user profile
+- `GET /v1/auth/google` — Google OAuth (public)
+- `GET/POST /v1/scans` — list/trigger scans
+- `GET /v1/scans/{id}/status` — poll scan status
+- `GET /v1/trends` — list trends with filters
+- `GET /v1/trends/top` — top trends by time window
+- `GET /v1/posts` — list content posts
+- `POST /v1/posts/generate` — generate posts (proxied to ai-service)
+- `PATCH /v1/posts/{id}/status` — update post workflow status
+- `POST /v1/publish/{postId}` — publish immediately
+- `POST /v1/publish/{postId}/schedule` — schedule publish
+- `POST /v1/publish/{postId}/auto` — auto-schedule at golden hour
+- `DELETE /v1/publish/{postId}/schedule` — cancel scheduled publish
+- `GET /v1/publish/{publishedPostId}/status` — poll publish status
+- `GET /v1/publish/golden-hours` — engagement golden hours
+- `GET /v1/reports` — list reports
+
+### External Services
+
+| Service | Client | Purpose |
+|---------|--------|---------|
+| HackerNews | `app/tools/hackernews_tool.py` | Firebase API — crawl top stories |
+| OpenAI GPT-4o | `app/clients/openai_client.py` | Trend analysis, content generation, review |
+| BFL (Black Forest Labs) | `app/clients/bfl_client.py` | Image generation |
+| TikTok API | `app/clients/tiktok_client.py` | OAuth + photo post publishing |
+| Firecrawl | `app/clients/firecrawl_client.py` | Web scraping fallback |
 
 ### Config
 
-Pydantic Settings in `app/config.py`, loaded from `.env`. Key vars: `DATABASE_URL`, `REDIS_URL`, `OPENAI_API_KEY`, `APP_ENV`, `LOG_LEVEL`. Singleton via `@lru_cache get_settings()`.
+**AI Service** — Pydantic Settings in `app/config.py`, singleton via `@lru_cache get_settings()`. Key env vars: `DATABASE_URL`, `REDIS_URL`, `OPENAI_API_KEY`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `BFL_API_KEY`, `S3_BUCKET`, `REQUIRE_INTERNAL_AUTH`, `INTERNAL_API_KEY`, `APP_ENV`, `LOG_LEVEL`.
+
+**Backend** — NestJS ConfigModule from `backend/.env`. Key vars: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `AI_SERVICE_URL`, `AI_SERVICE_INTERNAL_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 
 ## Docker
 
 ```bash
-docker-compose up -d                # All services (postgres + redis + app)
-docker-compose up -d postgres redis  # Just infra for local dev
+docker compose up -d                       # All services (postgres + redis + ai-service + backend)
+docker compose up -d postgres redis        # Just infra for local dev
 ```
 
-Postgres: `scanner/scanner_pass@localhost:5432/trending_scanner`. Redis: `localhost:6379/0`.
+Services: postgres:16 (5432), redis:7 (6379), ai-service (8000), backend (3000). Frontend runs separately on :3001.
+
+DB init: `backend/docker/init-db.sql` bootstraps `ai_svc`/`backend_svc` roles and `ai`/`app` schemas on first boot.
 
 ## Design Docs
 
-Architecture and roadmap documents in `docs/` (overview, features, crawling architecture). Consult when making architectural decisions.
+Architecture and roadmap in `docs/`. Key references:
+- `docs/07-post-generation-agent.md` — Post generation pipeline details
+- `docs/08-publish-post-agent.md` — TikTok publishing pipeline details
+- `docs/09-backend-api-layer.md` — NestJS backend architecture
+- `docs/architecture-diagrams.md` — Mermaid diagrams (system, pipelines, ERD, data flow)

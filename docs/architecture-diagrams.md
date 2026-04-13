@@ -4,48 +4,59 @@
 
 ```mermaid
 graph TB
-    subgraph CLIENT["👤 Client Layer (Planned)"]
-        FE["Next.js 15 Frontend<br/>(Planned - Phase 3)"]
-        BE["NestJS Backend<br/>(Planned - Phase 3)"]
+    subgraph CLIENT["Client Layer"]
+        FE["Next.js 14 Frontend<br/>Port 3001<br/>─────────────────<br/>Dashboard, Trends, Content,<br/>Media, Schedule, Analytics"]
     end
 
-    subgraph FASTAPI["🚀 FastAPI Application (Port 8000)"]
+    subgraph BACKEND["NestJS Backend (Port 3000)"]
+        AUTH["Auth Module<br/>JWT + Google OAuth"]
+        GW["API Gateway<br/>11 Modules"]
+        WS["WebSocket Gateway<br/>Socket.IO"]
+    end
+
+    subgraph FASTAPI["FastAPI AI Service (Port 8000)"]
         API["REST API<br/>app/api/v1/"]
         BG["Background Tasks<br/>(asyncio)"]
     end
 
-    subgraph LANGGRAPH["🤖 LangGraph Pipelines"]
+    subgraph LANGGRAPH["LangGraph Pipelines"]
         P1["Pipeline 1: Trend Scanning<br/>(supervisor.py)"]
         P2["Pipeline 2: Post Generation<br/>(post_generator/graph.py)"]
+        P3["Pipeline 3: Publish Post<br/>(publish_post/graph.py)"]
     end
 
-    subgraph INFRA["⚙️ Infrastructure Layer (app/core/)"]
+    subgraph INFRA["Infrastructure Layer (app/core/)"]
         RL["Rate Limiter<br/>(Redis Sorted Set)"]
         DD["Deduplication<br/>(SHA256 + Jaccard)"]
         RT["Retry<br/>(Tenacity)"]
         ST["Storage<br/>(Local / S3)"]
     end
 
-    subgraph DATA["💾 Data Layer"]
-        PG["PostgreSQL 16<br/>(asyncpg + SQLAlchemy 2.0)"]
-        RD["Redis 7<br/>(Cache + Rate Limit)"]
+    subgraph DATA["Data Layer"]
+        PG["PostgreSQL 16<br/>─────────────────<br/>ai schema (Alembic)<br/>app schema (Prisma)"]
+        RD["Redis 7<br/>─────────────────<br/>Cache + Rate Limit<br/>+ APScheduler Jobs"]
         FS["File Storage<br/>(reports/ + posts/)"]
     end
 
-    subgraph EXTERNAL["🌐 External Services"]
+    subgraph EXTERNAL["External Services"]
         HN["HackerNews<br/>Firebase API"]
         OAI["OpenAI GPT-4o<br/>(via LangChain)"]
-        Lumnnia Image 2.0["Lumnnia Image 2.0<br/>Image Generation"]
+        BFL["BFL<br/>Image Generation"]
+        TT["TikTok API<br/>OAuth + Publish"]
     end
 
-    FE <-->|HTTP| BE
-    BE <-->|HTTP| API
+    FE <-->|HTTP + WS| BACKEND
+    AUTH --> GW
+    GW <-->|HTTP| API
+    WS <-->|Events| FE
     API --> BG
     BG --> P1
     P1 -->|conditional| P2
+    P2 -->|approved posts| P3
 
     P1 --> INFRA
     P2 --> INFRA
+    P3 --> INFRA
 
     INFRA --> PG
     INFRA --> RD
@@ -55,11 +66,13 @@ graph TB
     P1 -->|analyze trends| OAI
     P2 -->|generate posts| OAI
     P2 -->|generate images| BFL
+    P3 -->|publish posts| TT
 
     RL --> RD
     ST --> FS
 
-    style CLIENT fill:#f5f5f5,stroke:#999,stroke-dasharray: 5 5
+    style CLIENT fill:#e3f2fd,stroke:#1565c0
+    style BACKEND fill:#f3e5f5,stroke:#7b1fa2
     style FASTAPI fill:#e8f5e9,stroke:#388e3c
     style LANGGRAPH fill:#e3f2fd,stroke:#1565c0
     style INFRA fill:#fff3e0,stroke:#ef6c00
@@ -76,23 +89,23 @@ graph TD
     START((START)) --> HN_SCAN
 
     subgraph SCAN["Stage 1: Data Collection"]
-        HN_SCAN["hackernews_scanner<br/>─────────────────<br/>• Fetch top stories (Firebase API)<br/>• Crawl article URLs (5 concurrent)<br/>• Extract HTML → text<br/>• Filter tech relevance"]
+        HN_SCAN["hackernews_scanner<br/>─────────────────<br/>Fetch top stories (Firebase API)<br/>Crawl article URLs (5 concurrent)<br/>Extract HTML to text<br/>Filter tech relevance"]
     end
 
-    HN_SCAN --> COLLECT["collect_results<br/>─────────────────<br/>• Validate & merge results<br/>• Log statistics"]
+    HN_SCAN --> COLLECT["collect_results<br/>─────────────────<br/>Validate & merge results<br/>Log statistics"]
 
     subgraph ANALYZE["Stage 2: AI Analysis"]
-        COLLECT --> ANALYZER["trend_analyzer<br/>─────────────────<br/>• Quality scoring (1-10)<br/>• Discard score < 5<br/>• Deep analysis: sentiment,<br/>  lifecycle, linkedin_angles<br/>• Generate Vietnamese report<br/>• Content angles JSON<br/>─────────────────<br/>GPT-4o · 16K tokens · temp=0.1"]
+        COLLECT --> ANALYZER["trend_analyzer<br/>─────────────────<br/>Quality scoring (1-10)<br/>Discard score < 5<br/>Deep analysis: sentiment,<br/>  lifecycle, engagement_prediction<br/>Generate Vietnamese report<br/>Content angles JSON<br/>─────────────────<br/>GPT-4o | 16K tokens | temp=0.1"]
     end
 
     subgraph SAVE["Stage 3: Persistence"]
-        ANALYZER --> SAVER["content_saver<br/>─────────────────<br/>• Save articles as markdown<br/>• YAML frontmatter + body<br/>→ reports/{scan_id}/articles/"]
+        ANALYZER --> SAVER["content_saver<br/>─────────────────<br/>Save articles as markdown<br/>YAML frontmatter + body<br/>to reports/{scan_id}/articles/"]
 
-        SAVER --> PERSIST["persist_results<br/>─────────────────<br/>• Update ScanRun status<br/>• Bulk insert TrendItems<br/>• Set duration_ms<br/>→ PostgreSQL"]
+        SAVER --> PERSIST["persist_results<br/>─────────────────<br/>Update ScanRun status<br/>Bulk insert TrendItems<br/>Auto-create ContentPosts<br/>Set duration_ms<br/>to PostgreSQL"]
     end
 
     PERSIST --> DECISION{generate_posts<br/>= True?}
-    DECISION -->|Yes| POST_GEN["→ Pipeline 2:<br/>Post Generation"]
+    DECISION -->|Yes| POST_GEN["Pipeline 2:<br/>Post Generation"]
     DECISION -->|No| END_NODE((END))
     POST_GEN --> END_NODE
 
@@ -112,22 +125,22 @@ graph TD
 graph TD
     START((START)) --> STRATEGY
 
-    STRATEGY["strategy_alignment<br/>─────────────────<br/>• Load TrendItems from DB<br/>• Read trend report markdown<br/>• Load strategy config<br/>• Select trends + angles + formats<br/>─────────────────<br/>GPT-4o · 8K tokens · temp=0.7"]
+    STRATEGY["strategy_alignment<br/>─────────────────<br/>Load TrendItems from DB<br/>Read trend report markdown<br/>Load strategy config<br/>Select trends + angles + formats<br/>─────────────────<br/>GPT-4o | 8K tokens | temp=0.7"]
 
-    STRATEGY --> CONTENT["content_generation<br/>─────────────────<br/>• 7 format templates:<br/>  thought_leadership, hot_take,<br/>  case_study, tutorial,<br/>  industry_analysis, career_advice,<br/>  behind_the_scenes<br/>• LinkedIn formatting rules<br/>• Hook + CTA + Hashtags<br/>─────────────────<br/>GPT-4o · 8K tokens · temp=0.7"]
+    STRATEGY --> CONTENT["content_generation<br/>─────────────────<br/>7 format templates:<br/>  quick_tips, hot_take,<br/>  trending_breakdown, did_you_know,<br/>  tutorial_hack, myth_busters,<br/>  behind_the_tech<br/>Hook + CTA + Hashtags<br/>─────────────────<br/>GPT-4o | 8K tokens | temp=0.7"]
 
-    CONTENT --> IMG_PROMPT["image_prompt_creation<br/>─────────────────<br/>• Map format → image style<br/>• Generate Lumnia2.0 prompt<br/>• Aspect ratio, text overlay<br/>─────────────────<br/>GPT-4o · 4K tokens · temp=0.3"]
+    CONTENT --> IMG_PROMPT["image_prompt_creation<br/>─────────────────<br/>Map format to image style<br/>Generate BFL prompt<br/>Aspect ratio, text overlay<br/>─────────────────<br/>GPT-4o | 4K tokens | temp=0.1"]
 
-    IMG_PROMPT --> IMG_GEN["image_generation<br/>─────────────────<br/>• Call Lumnia2.0 Model<br/>• 1200×1200 for LinkedIn<br/>• Save image to storage"]
+    IMG_PROMPT --> IMG_GEN["image_generation<br/>─────────────────<br/>Call BFL API<br/>Save image to storage"]
 
-    IMG_GEN --> REVIEW["auto_review<br/>─────────────────<br/>7 Criteria (weighted):<br/>• Hook strength (20%)<br/>• Value density (15%)<br/>• Data points (15%)<br/>• Strategy alignment (15%)<br/>• Originality (15%)<br/>• CTA quality (10%)<br/>• Format compliance (10%)<br/>─────────────────<br/>GPT-4o · 4K tokens · temp=0.1"]
+    IMG_GEN --> REVIEW["auto_review<br/>─────────────────<br/>7 Criteria (weighted):<br/>Hook strength (20%)<br/>Value density (15%)<br/>Data points (15%)<br/>Strategy alignment (15%)<br/>Originality (15%)<br/>CTA quality (10%)<br/>Format compliance (10%)<br/>─────────────────<br/>GPT-4o | 4K tokens | temp=0.1"]
 
     REVIEW --> ROUTER{review_router<br/>─────────<br/>score < 7 AND<br/>revision < 2?}
 
     ROUTER -->|"revise<br/>(revision_count++)"| CONTENT
-    ROUTER -->|"package<br/>(score ≥ 7 or max revisions)"| OUTPUT
+    ROUTER -->|"package<br/>(score >= 7 or max revisions)"| OUTPUT
 
-    OUTPUT["output_packaging<br/>─────────────────<br/>• Build final JSON output<br/>• Enrich: word_count, read_time,<br/>  posting_day, timing_window<br/>• Save to storage + PostgreSQL<br/>→ posts/{scan_id}/<br/>→ content_posts table"]
+    OUTPUT["output_packaging<br/>─────────────────<br/>Build final JSON output<br/>Enrich: word_count, read_time,<br/>  posting_day, timing_window<br/>Save to storage + PostgreSQL<br/>to posts/{scan_id}/<br/>to content_posts table"]
 
     OUTPUT --> END_NODE((END))
 
@@ -139,18 +152,80 @@ graph TD
 
 ---
 
-## 4. Database Entity Relationship Diagram
+## 4. LangGraph Pipeline 3 — Publish Post Agent
+
+```mermaid
+graph TD
+    START((START)) --> VALIDATE
+
+    VALIDATE["resolve_and_validate<br/>─────────────────<br/>Load ContentPost from DB<br/>Validate status (approved)<br/>Check duplicate publishes<br/>Create PublishedPost record<br/>Resolve image public URL<br/>Validate TikTok token"]
+
+    VALIDATE --> GOLDEN["golden_hour<br/>─────────────────<br/>Load EngagementTimeSlot data<br/>Calculate optimal posting time<br/>Default: 07:00, 12:00, 19:00<br/>Timezone: Asia/Ho_Chi_Minh"]
+
+    GOLDEN --> SCHEDULER["scheduler<br/>─────────────────<br/>Decide: publish now<br/>or schedule via APScheduler<br/>APScheduler + Redis job store"]
+
+    SCHEDULER --> ROUTE{_route_after_schedule<br/>─────────<br/>publish_now<br/>or scheduled?}
+
+    ROUTE -->|publish_now| PUBLISH["publish_node<br/>─────────────────<br/>Assemble caption<br/>(body + hashtags + CTA)<br/>TikTok API photo post<br/>(3-step process)<br/>Retry 3x + poll status<br/>Privacy: SELF_ONLY default"]
+    ROUTE -->|scheduled| END_SCHED((END<br/>APScheduler<br/>triggers later))
+
+    PUBLISH --> END_NODE((END))
+
+    style START fill:#4caf50,color:#fff
+    style END_NODE fill:#f44336,color:#fff
+    style END_SCHED fill:#ff9800,color:#fff
+    style ROUTE fill:#fff9c4,stroke:#f9a825
+    style PUBLISH fill:#e8f5e9,stroke:#388e3c
+```
+
+---
+
+## 5. Database Entity Relationship Diagram
 
 ```mermaid
 erDiagram
+    User ||--o{ AuthIdentity : "has"
+    User ||--o{ RefreshToken : "has"
+    User ||--o{ AuditLog : "creates"
+    User ||--o{ ScanRun : "triggers"
     ScanRun ||--o{ TrendItem : "has many"
     ScanRun ||--o{ ContentPost : "generates"
     TrendItem ||--o{ TrendComment : "has many"
     TrendItem ||--o{ ContentPost : "source for"
+    ContentPost ||--o{ PublishedPost : "published as"
     ScanSchedule ||--o{ ScanRun : "triggers"
+
+    User {
+        UUID id PK
+        varchar email "unique"
+        varchar passwordHash
+        varchar displayName
+        varchar avatarUrl
+        enum role "admin|user"
+        timestamp createdAt
+        timestamp updatedAt
+    }
+
+    AuthIdentity {
+        UUID id PK
+        UUID userId FK
+        varchar provider "local|google"
+        varchar providerUserId
+        timestamp createdAt
+    }
+
+    RefreshToken {
+        UUID id PK
+        UUID userId FK
+        varchar tokenHash "unique"
+        timestamp expiresAt
+        timestamp revokedAt
+        timestamp createdAt
+    }
 
     ScanRun {
         UUID id PK
+        UUID triggeredBy FK "nullable, to User"
         enum status "pending|running|completed|partial|failed"
         JSON platforms_requested
         JSON platforms_completed
@@ -195,12 +270,15 @@ erDiagram
     ContentPost {
         UUID id PK
         UUID scan_run_id FK
-        UUID trend_item_id FK
-        enum format "thought_leadership|hot_take|case_study|..."
+        UUID trend_item_id FK "nullable"
+        UUID created_by "nullable, User ID"
+        enum format "quick_tips|hot_take|trending_breakdown|..."
         text caption
         JSON hashtags
         varchar cta
         JSON image_prompt
+        varchar trend_title
+        varchar trend_url
         enum status "draft|approved|needs_revision|flagged|published"
         float review_score "1-10"
         text review_notes
@@ -213,6 +291,54 @@ erDiagram
         varchar file_path
         varchar image_path
         timestamp created_at
+        timestamp updated_at
+    }
+
+    PublishedPost {
+        UUID id PK
+        UUID content_post_id FK
+        UUID published_by "nullable, User ID"
+        varchar platform
+        enum publish_mode "auto|manual"
+        enum status "pending|processing|published|failed|cancelled"
+        varchar privacy_level
+        varchar tiktok_publish_id
+        varchar platform_post_id
+        varchar golden_hour_slot
+        timestamp scheduled_at
+        timestamp published_at
+        varchar scheduler_job_id
+        text assembled_caption
+        varchar error_message
+        int retry_count
+        JSON api_response
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    UserPlatformToken {
+        UUID id PK
+        UUID user_id
+        varchar platform
+        text encrypted_access_token
+        text encrypted_refresh_token
+        varchar open_id
+        timestamp token_expires_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    EngagementTimeSlot {
+        UUID id PK
+        varchar platform
+        varchar time_slot
+        int slot_index
+        float avg_views
+        float avg_likes
+        float avg_comments
+        float avg_shares
+        float weighted_score
+        int sample_count
         timestamp updated_at
     }
 
@@ -232,179 +358,191 @@ erDiagram
         timestamp next_run
         timestamp created_at
     }
+
+    AuditLog {
+        UUID id PK
+        UUID userId FK "nullable"
+        varchar action
+        varchar resource
+        varchar resourceId
+        JSON metadata
+        timestamp createdAt
+    }
 ```
 
 ---
 
-## 5. API Endpoint Map
+## 6. API Endpoint Map
 
 ```mermaid
 graph LR
-    subgraph SCAN["Scan Management"]
-        S1["POST /api/v1/scan<br/>→ 202 Accepted"]
-        S2["GET /api/v1/scan/{id}/status<br/>→ scan progress"]
-        S3["POST /api/v1/scan/schedule<br/>→ create cron"]
-        S4["GET /api/v1/scan/schedule<br/>→ list schedules"]
+    subgraph GATEWAY["Backend Gateway (:3000)"]
+        direction TB
+        subgraph AUTH_EP["Auth (Public)"]
+            A1["POST /auth/register"]
+            A2["POST /auth/login"]
+            A3["POST /auth/refresh"]
+            A4["GET /auth/google"]
+        end
+
+        subgraph PROTECTED["Protected (JWT Required)"]
+            subgraph SCAN_EP["Scans"]
+                S1["GET /scans"]
+                S2["POST /scans"]
+                S3["GET /scans/{id}/status"]
+            end
+
+            subgraph TREND_EP["Trends"]
+                T1["GET /trends"]
+                T2["GET /trends/top"]
+                T3["GET /trends/{id}"]
+            end
+
+            subgraph POST_EP["Posts"]
+                P1["GET /posts"]
+                P2["POST /posts/generate"]
+                P3["PATCH /posts/{id}/status"]
+            end
+
+            subgraph PUB_EP["Publish"]
+                PB1["POST /publish/{postId}"]
+                PB2["POST /publish/{postId}/schedule"]
+                PB3["POST /publish/{postId}/auto"]
+                PB4["DELETE /publish/{postId}/schedule"]
+                PB5["GET /publish/{id}/status"]
+                PB6["GET /publish/golden-hours"]
+            end
+
+            subgraph REPORT_EP["Reports"]
+                R1["GET /reports"]
+            end
+        end
     end
 
-    subgraph TRENDS["Trend Queries"]
-        T1["GET /api/v1/trends<br/>→ list + filters + pagination"]
-        T2["GET /api/v1/trends/top<br/>→ top by 24h/7d/30d"]
-        T3["GET /api/v1/trends/{id}<br/>→ detail + comments"]
+    subgraph AI_SERVICE["AI Service (:8000)"]
+        AI_SCAN["POST /api/v1/scan"]
+        AI_TRENDS["GET /api/v1/trends"]
+        AI_POSTS["POST /api/v1/posts/generate"]
+        AI_PUB["POST /api/v1/publish/{id}"]
+        AI_AUTH["GET /api/v1/auth/tiktok/*"]
     end
 
-    subgraph REPORTS["Reports"]
-        R1["GET /api/v1/reports<br/>→ list reports"]
-        R2["GET /api/v1/reports/{id}<br/>→ markdown report"]
-        R3["GET /api/v1/reports/{id}/summary<br/>→ JSON + angles"]
-    end
+    S2 -->|proxy| AI_SCAN
+    T1 -->|proxy| AI_TRENDS
+    P2 -->|proxy| AI_POSTS
+    PB1 -->|proxy| AI_PUB
 
-    subgraph POSTS["Post Generation"]
-        P1["POST /api/v1/posts/generate<br/>→ 202 trigger gen"]
-        P2["GET /api/v1/posts<br/>→ list posts"]
-        P3["GET /api/v1/posts/{id}<br/>→ post detail"]
-        P4["PATCH /api/v1/posts/{id}/status<br/>→ update status"]
-    end
-
-    CLIENT["Client / API Consumer"] --> SCAN
-    CLIENT --> TRENDS
-    CLIENT --> REPORTS
-    CLIENT --> POSTS
-
-    style SCAN fill:#e8f5e9,stroke:#388e3c
-    style TRENDS fill:#e3f2fd,stroke:#1565c0
-    style REPORTS fill:#fff3e0,stroke:#ef6c00
-    style POSTS fill:#fce4ec,stroke:#c62828
+    style GATEWAY fill:#f3e5f5,stroke:#7b1fa2
+    style AI_SERVICE fill:#e8f5e9,stroke:#388e3c
+    style AUTH_EP fill:#fff3e0,stroke:#ef6c00
+    style PROTECTED fill:#e3f2fd,stroke:#1565c0
 ```
 
 ---
 
-## 6. Data Flow — End-to-End Request Lifecycle
+## 7. Data Flow — End-to-End Request Lifecycle
 
 ```mermaid
 sequenceDiagram
-    participant C as Client
-    participant API as FastAPI
+    participant U as User
+    participant FE as Frontend
+    participant BE as Backend
+    participant AI as AI Service
     participant PG as PostgreSQL
-    participant BG as Background Task
     participant HN as HackerNews API
     participant GPT as OpenAI GPT-4o
-    participant Lumnia Image 2.0
+    participant BFL as BFL Image API
+    participant TT as TikTok API
     participant RD as Redis
-    participant FS as File Storage
 
-    C->>API: POST /api/v1/scan
-    API->>PG: Create ScanRun (PENDING)
-    API-->>C: 202 {scan_id, status: "accepted"}
+    Note over U,TT: Phase 1: Trend Scanning
 
-    API->>BG: Queue run_scan()
-    BG->>PG: Update ScanRun → RUNNING
+    U->>FE: Click "Start Scan"
+    FE->>BE: POST /scans (JWT)
+    BE->>AI: POST /api/v1/scan (X-User-Id)
+    AI->>PG: Create ScanRun (PENDING)
+    AI-->>BE: 202 {scan_id}
+    BE-->>FE: 202 {scan_id}
+    FE->>BE: WebSocket subscribe(scan, scan_id)
+
+    AI->>PG: Update ScanRun RUNNING
 
     rect rgb(227, 242, 253)
-        Note over BG,HN: Pipeline 1: Trend Scanning
-        BG->>RD: Check rate limit
-        RD-->>BG: OK
-        BG->>HN: GET /v0/topstories.json
-        HN-->>BG: [story_ids]
-        BG->>HN: GET /v0/item/{id}.json (×N)
-        HN-->>BG: Story details
-        BG->>HN: Crawl article URLs (5 concurrent)
-        HN-->>BG: Article text content
+        Note over AI,HN: HackerNews Crawling
+        AI->>RD: Check rate limit
+        AI->>HN: GET /v0/topstories.json
+        HN-->>AI: [story_ids]
+        AI->>HN: Crawl article URLs (5 concurrent)
+        HN-->>AI: Article text
     end
 
     rect rgb(255, 243, 224)
-        Note over BG,GPT: AI Analysis
-        BG->>GPT: Analyze trends (16K, temp=0.1)
-        GPT-->>BG: Quality scores, sentiment, lifecycle, angles, report
+        Note over AI,GPT: Trend Analysis
+        AI->>GPT: Analyze trends (16K, temp=0.1)
+        GPT-->>AI: Quality scores, sentiment, lifecycle, report
     end
 
     rect rgb(232, 245, 233)
-        Note over BG,FS: Persist Results
-        BG->>FS: Save articles as markdown
-        BG->>FS: Save trend report + summary
-        BG->>PG: Bulk insert TrendItems
-        BG->>PG: Update ScanRun (COMPLETED)
+        Note over AI,PG: Persist
+        AI->>PG: Save articles as markdown
+        AI->>PG: Bulk insert TrendItems
+        AI->>PG: Update ScanRun COMPLETED
     end
 
-    C->>API: POST /api/v1/posts/generate
-    API->>PG: Read TrendItems + ScanRun
-    API-->>C: 202 Accepted
+    BE-->>FE: WS: scan_completed
+    FE-->>U: Show results
+
+    Note over U,TT: Phase 2: Post Generation
+
+    U->>FE: Click "Generate Posts"
+    FE->>BE: POST /posts/generate (JWT)
+    BE->>AI: POST /api/v1/posts/generate
 
     rect rgb(252, 228, 236)
-        Note over BG,BFL: Pipeline 2: Post Generation
-        BG->>GPT: Strategy alignment (8K, temp=0.7)
-        GPT-->>BG: content_plan[]
-        BG->>GPT: Generate posts (8K, temp=0.7)
-        GPT-->>BG: LinkedIn posts (7 formats)
-        BG->>GPT: Image prompts (4K, temp=0.3)
-        GPT-->>BG: Lumnia Image 2.0 prompts
-        BG->>BFL: Generate images (1200×1200)
-        BFL-->>BG: Image URLs
-        BG->>GPT: Auto-review (4K, temp=0.1)
-        GPT-->>BG: Scores (7 criteria)
+        Note over AI,BFL: Post Generation Pipeline
+        AI->>GPT: Strategy alignment (8K, temp=0.7)
+        AI->>GPT: Generate posts (8K, temp=0.7)
+        AI->>GPT: Image prompts (4K, temp=0.1)
+        AI->>BFL: Generate images
+        BFL-->>AI: Image URLs
+        AI->>GPT: Auto-review (4K, temp=0.1)
 
         alt Score < 7 AND revision < 2
-            BG->>GPT: Revise posts with feedback
-            GPT-->>BG: Revised posts
-            BG->>GPT: Re-review
-            GPT-->>BG: Updated scores
+            AI->>GPT: Revise posts
+            AI->>GPT: Re-review
         end
 
-        BG->>FS: Save posts JSON + images
-        BG->>PG: Insert ContentPosts
+        AI->>PG: Insert ContentPosts
     end
 
-    C->>API: GET /api/v1/posts
-    API->>PG: Query ContentPosts
-    API-->>C: Posts with scores + images
-```
+    AI-->>BE: Posts created
+    BE-->>FE: WS: posts_ready
+    FE-->>U: Show generated posts
 
----
+    Note over U,TT: Phase 3: Publish to TikTok
 
-## 7. Infrastructure & Deployment
+    U->>FE: Review & approve post
+    FE->>BE: PATCH /posts/{id}/status (approved)
+    U->>FE: Click "Publish"
+    FE->>BE: POST /publish/{postId}
+    BE->>AI: POST /api/v1/publish/{id}
 
-```mermaid
-graph TB
-    subgraph DOCKER["Docker Compose"]
-        subgraph APP["app container"]
-            UVICORN["Uvicorn<br/>FastAPI + LangGraph<br/>Port 8000"]
-        end
-
-        subgraph DB["postgres container"]
-            POSTGRES["PostgreSQL 16 Alpine<br/>Port 5432<br/>─────────────────<br/>DB: trending_scanner<br/>User: scanner"]
-        end
-
-        subgraph CACHE["redis container"]
-            REDIS["Redis 7 Alpine<br/>Port 6379<br/>─────────────────<br/>• API response cache (30min TTL)<br/>• Rate limit counters<br/>• Sliding window sets"]
-        end
+    rect rgb(243, 229, 245)
+        Note over AI,TT: Publish Pipeline
+        AI->>PG: Load ContentPost + validate
+        AI->>PG: Create PublishedPost
+        AI->>RD: Check golden hour
+        AI->>TT: Initialize photo post
+        TT-->>AI: publish_id
+        AI->>TT: Upload image
+        AI->>TT: Poll publish status
+        TT-->>AI: Published
+        AI->>PG: Update PublishedPost (published)
     end
 
-    subgraph STORAGE["File Storage"]
-        LOCAL["Local Filesystem<br/>(Development)<br/>─────────────────<br/>ai-service/reports/<br/>ai-service/posts/<br/>ai-service/strategy/"]
-        S3["AWS S3<br/>(Production)<br/>─────────────────<br/>s3://{bucket}/{prefix}/"]
-    end
-
-    subgraph CONFIG["Configuration"]
-        ENV[".env file<br/>─────────────────<br/>DATABASE_URL<br/>REDIS_URL<br/>OPENAI_API_KEY<br/>BFL_API_KEY<br/>S3_BUCKET<br/>APP_ENV"]
-        PYDANTIC["Pydantic Settings<br/>app/config.py<br/>─────────────────<br/>@lru_cache<br/>get_settings()"]
-    end
-
-    subgraph MIGRATIONS["Database Migrations"]
-        ALEMBIC["Alembic<br/>alembic/versions/*.py"]
-    end
-
-    UVICORN --> POSTGRES
-    UVICORN --> REDIS
-    UVICORN --> LOCAL
-    UVICORN --> S3
-    ENV --> PYDANTIC
-    PYDANTIC --> UVICORN
-    ALEMBIC --> POSTGRES
-
-    style DOCKER fill:#e3f2fd,stroke:#1565c0
-    style STORAGE fill:#e8f5e9,stroke:#388e3c
-    style CONFIG fill:#fff3e0,stroke:#ef6c00
-    style MIGRATIONS fill:#f3e5f5,stroke:#7b1fa2
+    AI-->>BE: Published
+    BE-->>FE: WS: publish_completed
+    FE-->>U: Show success
 ```
 
 ---
@@ -422,14 +560,14 @@ graph LR
 
         D["get_review_llm()<br/>─────────────────<br/>max_tokens: 4,096<br/>temperature: 0.1<br/>─────────────────<br/>Used by: auto_review,<br/>image_prompt_creation"]
 
-        E["get_llm()<br/>─────────────────<br/>max_tokens: 4,096<br/>temperature: 0.0<br/>─────────────────<br/>Used by: general analysis"]
+        E["get_llm()<br/>─────────────────<br/>max_tokens: 4,096<br/>temperature: 0.0<br/>─────────────────<br/>Used by: general tasks"]
     end
 
-    PRECISE["🎯 Precise<br/>temp 0.0-0.1"] --> A
+    PRECISE["Precise<br/>temp 0.0-0.1"] --> A
     PRECISE --> D
     PRECISE --> E
-    BALANCED["⚖️ Balanced<br/>temp 0.3"] --> B
-    CREATIVE["🎨 Creative<br/>temp 0.7"] --> C
+    BALANCED["Balanced<br/>temp 0.3"] --> B
+    CREATIVE["Creative<br/>temp 0.7"] --> C
 
     style PRECISE fill:#e8f5e9,stroke:#388e3c
     style BALANCED fill:#fff3e0,stroke:#ef6c00
@@ -442,13 +580,13 @@ graph LR
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: POST /api/v1/scan
+    [*] --> PENDING: POST /scans (via backend)
 
     PENDING --> RUNNING: Background task starts
 
-    RUNNING --> COMPLETED: All platforms succeed
-    RUNNING --> PARTIAL: Some platforms fail
-    RUNNING --> FAILED: All platforms fail / unhandled error
+    RUNNING --> COMPLETED: All scanners succeed
+    RUNNING --> PARTIAL: Some scanners fail
+    RUNNING --> FAILED: All fail / unhandled error
 
     COMPLETED --> [*]
     PARTIAL --> [*]
@@ -465,7 +603,7 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> draft: Post generated
+    [*] --> draft: Post generated by Pipeline 2
 
     draft --> auto_review: auto_review node scores post
 
@@ -476,8 +614,96 @@ stateDiagram-v2
 
     needs_revision --> draft: content_generation revises
 
-    approved --> published: PATCH /posts/{id}/status
-    flagged_for_review --> approved: Manual human review
+    approved --> published: User publishes via Pipeline 3
+    flagged_for_review --> approved: Manual human review via frontend
 
     published --> [*]
+```
+
+---
+
+## 11. Publish Post State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: POST /publish/{postId}
+
+    pending --> processing: Pipeline 3 starts
+
+    processing --> published: TikTok API success
+    processing --> failed: TikTok API error (after 3 retries)
+    processing --> cancelled: User cancels scheduled publish
+
+    pending --> cancelled: DELETE /publish/{postId}/schedule
+
+    published --> [*]
+    failed --> [*]
+    cancelled --> [*]
+
+    note right of pending: PublishedPost created
+    note right of processing: TikTok API calls in progress
+    note left of published: platform_post_id set
+```
+
+---
+
+## 12. Infrastructure & Deployment
+
+```mermaid
+graph TB
+    subgraph DOCKER["Docker Compose"]
+        subgraph FE_CONTAINER["frontend (separate)"]
+            NEXT["Next.js 14<br/>Port 3001<br/>─────────────────<br/>npm run dev"]
+        end
+
+        subgraph BE_CONTAINER["backend container"]
+            NEST["NestJS<br/>Port 3000<br/>─────────────────<br/>11 Modules<br/>JWT + WebSocket"]
+        end
+
+        subgraph AI_CONTAINER["ai-service container"]
+            UVICORN["Uvicorn<br/>FastAPI + LangGraph<br/>Port 8000<br/>─────────────────<br/>3 Pipelines"]
+        end
+
+        subgraph DB["postgres container"]
+            POSTGRES["PostgreSQL 16 Alpine<br/>Port 5432<br/>─────────────────<br/>DB: trending_scanner<br/>Schemas: ai + app<br/>Roles: scanner, ai_svc, backend_svc"]
+        end
+
+        subgraph CACHE["redis container"]
+            REDIS["Redis 7 Alpine<br/>Port 6379<br/>─────────────────<br/>API cache (30min TTL)<br/>Rate limit counters<br/>APScheduler job store"]
+        end
+    end
+
+    subgraph STORAGE["File Storage"]
+        LOCAL["Local Filesystem<br/>(Development)<br/>─────────────────<br/>ai-service/reports/<br/>ai-service/posts/<br/>ai-service/strategy/"]
+        S3["AWS S3<br/>(Production)<br/>─────────────────<br/>s3://{bucket}/{prefix}/"]
+    end
+
+    subgraph CONFIG["Configuration"]
+        AI_ENV["ai-service/.env<br/>─────────────────<br/>DATABASE_URL<br/>REDIS_URL<br/>OPENAI_API_KEY<br/>TIKTOK_CLIENT_KEY<br/>TOKEN_ENCRYPTION_KEY<br/>BFL_API_KEY"]
+        BE_ENV["backend/.env<br/>─────────────────<br/>DATABASE_URL<br/>JWT_ACCESS_SECRET<br/>JWT_REFRESH_SECRET<br/>AI_SERVICE_URL<br/>GOOGLE_CLIENT_ID"]
+    end
+
+    subgraph MIGRATIONS["Database Migrations"]
+        ALEMBIC["Alembic<br/>ai schema<br/>alembic/versions/*.py"]
+        PRISMA["Prisma<br/>app schema<br/>prisma/migrations/"]
+        INITDB["init-db.sql<br/>Role bootstrap<br/>backend/docker/"]
+    end
+
+    NEXT --> NEST
+    NEST --> UVICORN
+    UVICORN --> POSTGRES
+    UVICORN --> REDIS
+    NEST --> POSTGRES
+    UVICORN --> LOCAL
+    UVICORN --> S3
+    AI_ENV --> UVICORN
+    BE_ENV --> NEST
+    ALEMBIC --> POSTGRES
+    PRISMA --> POSTGRES
+    INITDB --> POSTGRES
+
+    style DOCKER fill:#e3f2fd,stroke:#1565c0
+    style STORAGE fill:#e8f5e9,stroke:#388e3c
+    style CONFIG fill:#fff3e0,stroke:#ef6c00
+    style MIGRATIONS fill:#f3e5f5,stroke:#7b1fa2
 ```
