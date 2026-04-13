@@ -1,0 +1,360 @@
+// Prisma schema for the NestJS backend gateway.
+//
+// Two schemas:
+//   - app.*  — owned by this backend. Users, sessions, audit logs.
+//             All writes in this file live here.
+//   - ai.*   — owned by ai-service (managed by Alembic). Mirrored here
+//             as @@schema("ai") so the backend can read + perform the
+//             narrow writes documented in the implementation docs.
+//
+// Run `prisma generate` after editing, and `prisma migrate dev` to apply
+// changes to the `app` schema. NEVER run `prisma migrate` against `ai.*`
+// tables — those are Alembic's responsibility.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["app", "ai"]
+}
+
+// =========================================================================
+// app schema — owned by NestJS
+// =========================================================================
+
+enum UserRole {
+  admin
+  user
+
+  @@schema("app")
+}
+
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  passwordHash  String?  @map("password_hash")
+  displayName   String?  @map("display_name")
+  avatarUrl     String?  @map("avatar_url")
+  role          UserRole @default(user)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  identities    AuthIdentity[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+  @@schema("app")
+}
+
+model AuthIdentity {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  provider       String   // "local" | "google"
+  providerUserId String   @map("provider_user_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("auth_identities")
+  @@schema("app")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  tokenHash  String   @unique @map("token_hash")
+  expiresAt  DateTime @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+  @@schema("app")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String
+  resource   String
+  resourceId String?  @map("resource_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@map("audit_logs")
+  @@schema("app")
+}
+
+// =========================================================================
+// ai schema — READ ONLY for this service, except for the narrow mutation
+// surfaces noted below. The Python ai-service is the source of truth.
+// =========================================================================
+
+// --- ai-schema enums (managed by Alembic, mirrored here for reads) ---
+
+enum ScanStatus {
+  pending
+  running
+  completed
+  partial
+  failed
+
+  @@schema("ai")
+}
+
+enum AiPlatform {
+  hackernews
+
+  @@schema("ai")
+}
+
+enum Sentiment {
+  bullish
+  neutral
+  bearish
+  controversial
+
+  @@schema("ai")
+}
+
+enum TrendLifecycle {
+  emerging
+  rising
+  peaking
+  saturated
+  declining
+
+  @@schema("ai")
+}
+
+enum EngagementPrediction {
+  low
+  medium
+  high
+  viral
+
+  @@schema("ai")
+}
+
+enum SourceType {
+  official_blog
+  news
+  research
+  community
+  social
+
+  @@schema("ai")
+}
+
+enum ContentStatus {
+  draft
+  approved
+  needs_revision
+  flagged_for_review
+  published
+
+  @@schema("ai")
+}
+
+enum PostFormat {
+  quick_tips
+  hot_take
+  trending_breakdown
+  did_you_know
+  tutorial_hack
+  myth_busters
+  behind_the_tech
+
+  @@schema("ai")
+}
+
+enum PublishStatus {
+  pending
+  processing
+  published
+  failed
+  cancelled
+
+  @@schema("ai")
+}
+
+enum PublishMode {
+  auto
+  manual
+
+  @@schema("ai")
+}
+
+model ScanRun {
+  id                 String    @id @db.Uuid
+  triggeredBy        String?   @map("triggered_by") @db.Uuid
+  status             ScanStatus
+  platformsRequested Json      @map("platforms_requested")
+  platformsCompleted Json      @map("platforms_completed")
+  platformsFailed    Json      @map("platforms_failed")
+  totalItemsFound    Int       @map("total_items_found")
+  langgraphThreadId  String?   @map("langgraph_thread_id")
+  startedAt          DateTime  @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  durationMs         Int?      @map("duration_ms")
+  error              String?
+  reportFilePath     String?   @map("report_file_path")
+
+  trendItems   TrendItem[]
+  contentPosts ContentPost[]
+
+  @@index([triggeredBy])
+  @@map("scan_runs")
+  @@schema("ai")
+}
+
+model TrendItem {
+  id                   String    @id @db.Uuid
+  scanRunId            String    @map("scan_run_id") @db.Uuid
+  title                String
+  description          String?
+  contentBody          String?   @map("content_body")
+  sourceUrl            String?   @map("source_url")
+  platform             AiPlatform
+  tags                 Json
+  hashtags             Json
+  views                Int?
+  likes                Int?
+  commentsCount        Int?               @map("comments_count")
+  shares               Int?
+  trendingScore        Float?             @map("trending_score")
+  thumbnailUrl         String?            @map("thumbnail_url")
+  videoUrl             String?            @map("video_url")
+  imageUrls            Json               @map("image_urls")
+  authorName           String?            @map("author_name")
+  authorUrl            String?            @map("author_url")
+  authorFollowers      Int?               @map("author_followers")
+  category             String?
+  sentiment            Sentiment?
+  lifecycle            TrendLifecycle?
+  relevanceScore       Float?             @map("relevance_score")
+  qualityScore         Float?             @map("quality_score")
+  relatedTopics        Json               @map("related_topics")
+  engagementPrediction EngagementPrediction? @map("engagement_prediction")
+  sourceType           SourceType?        @map("source_type")
+  contentAngles        Json      @map("content_angles")
+  keyDataPoints        Json      @map("key_data_points")
+  targetAudience       Json      @map("target_audience")
+  cleanedContent       String?   @map("cleaned_content")
+  isPromoted           Boolean   @map("is_promoted")
+  dedupKey             String?   @map("dedup_key")
+  crossPlatformIds     Json      @map("cross_platform_ids")
+  rawData              Json?     @map("raw_data")
+  publishedAt          DateTime? @map("published_at")
+  discoveredAt         DateTime  @map("discovered_at")
+
+  scanRun ScanRun @relation(fields: [scanRunId], references: [id])
+
+  @@index([platform, category])
+  @@index([discoveredAt])
+  @@index([relevanceScore])
+  @@map("trend_items")
+  @@schema("ai")
+}
+
+model ContentPost {
+  id                   String    @id @db.Uuid
+  scanRunId            String    @map("scan_run_id") @db.Uuid
+  trendItemId          String?   @map("trend_item_id") @db.Uuid
+  createdBy            String?   @map("created_by") @db.Uuid
+  format               PostFormat
+  caption              String
+  hashtags             Json
+  cta                  String?
+  imagePrompt          Json?     @map("image_prompt")
+  trendTitle           String    @map("trend_title")
+  trendUrl             String?   @map("trend_url")
+  contentAngleUsed     String?   @map("content_angle_used")
+  targetAudience       Json      @map("target_audience")
+  wordCount            Int?      @map("word_count")
+  estimatedReadTime    String?   @map("estimated_read_time")
+  engagementPrediction String?   @map("engagement_prediction")
+  bestPostingDay       String?   @map("best_posting_day")
+  bestPostingTime      String?   @map("best_posting_time")
+  timingWindow         String?   @map("timing_window")
+  // WRITABLE: NestJS can update status (review queue).
+  status               ContentStatus
+  reviewScore          Float?    @map("review_score")
+  reviewNotes          String?   @map("review_notes")
+  reviewCriteria       Json?     @map("review_criteria")
+  revisionCount        Int       @map("revision_count")
+  isPromoted           Boolean   @map("is_promoted")
+  filePath             String?   @map("file_path")
+  imagePath            String?   @map("image_path")
+  createdAt            DateTime  @map("created_at")
+  updatedAt            DateTime? @map("updated_at")
+
+  scanRun        ScanRun         @relation(fields: [scanRunId], references: [id])
+  publishedPosts PublishedPost[]
+
+  @@index([createdBy])
+  @@index([scanRunId])
+  @@map("content_posts")
+  @@schema("ai")
+}
+
+model PublishedPost {
+  id                String    @id @db.Uuid
+  contentPostId     String    @map("content_post_id") @db.Uuid
+  publishedBy       String?   @map("published_by") @db.Uuid
+  platform          String
+  publishMode       PublishMode    @map("publish_mode")
+  status            PublishStatus
+  privacyLevel      String    @map("privacy_level")
+  tiktokPublishId   String?   @map("tiktok_publish_id")
+  platformPostId    String?   @map("platform_post_id")
+  goldenHourSlot    String?   @map("golden_hour_slot")
+  scheduledAt       DateTime? @map("scheduled_at")
+  publishedAt       DateTime? @map("published_at")
+  schedulerJobId    String?   @map("scheduler_job_id")
+  assembledCaption  String?   @map("assembled_caption")
+  errorMessage      String?   @map("error_message")
+  retryCount        Int       @map("retry_count")
+  apiResponse       Json?     @map("api_response")
+  createdAt         DateTime  @map("created_at")
+  updatedAt         DateTime? @map("updated_at")
+
+  contentPost ContentPost @relation(fields: [contentPostId], references: [id], onDelete: Cascade)
+
+  @@index([publishedBy])
+  @@index([contentPostId])
+  @@index([status])
+  @@map("published_posts")
+  @@schema("ai")
+}
+
+model EngagementTimeSlot {
+  id            String   @id @db.Uuid
+  platform      String
+  timeSlot      String   @map("time_slot")
+  slotIndex     Int      @map("slot_index")
+  avgViews      Float    @map("avg_views")
+  avgLikes      Float    @map("avg_likes")
+  avgComments   Float    @map("avg_comments")
+  avgShares     Float    @map("avg_shares")
+  weightedScore Float    @map("weighted_score")
+  sampleCount   Int      @map("sample_count")
+  updatedAt     DateTime @map("updated_at")
+
+  @@unique([platform, slotIndex])
+  @@map("engagement_time_slots")
+  @@schema("ai")
+}

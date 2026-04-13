@@ -35,7 +35,7 @@ graph TB
     subgraph EXTERNAL["🌐 External Services"]
         HN["HackerNews<br/>Firebase API"]
         OAI["OpenAI GPT-4o<br/>(via LangChain)"]
-        BFL["BFL FLUX<br/>Image Generation"]
+        Lumnnia Image 2.0["Lumnnia Image 2.0<br/>Image Generation"]
     end
 
     FE <-->|HTTP| BE
@@ -116,9 +116,9 @@ graph TD
 
     STRATEGY --> CONTENT["content_generation<br/>─────────────────<br/>• 7 format templates:<br/>  thought_leadership, hot_take,<br/>  case_study, tutorial,<br/>  industry_analysis, career_advice,<br/>  behind_the_scenes<br/>• LinkedIn formatting rules<br/>• Hook + CTA + Hashtags<br/>─────────────────<br/>GPT-4o · 8K tokens · temp=0.7"]
 
-    CONTENT --> IMG_PROMPT["image_prompt_creation<br/>─────────────────<br/>• Map format → image style<br/>• Generate BFL FLUX prompt<br/>• Aspect ratio, text overlay<br/>─────────────────<br/>GPT-4o · 4K tokens · temp=0.3"]
+    CONTENT --> IMG_PROMPT["image_prompt_creation<br/>─────────────────<br/>• Map format → image style<br/>• Generate Lumnia2.0 prompt<br/>• Aspect ratio, text overlay<br/>─────────────────<br/>GPT-4o · 4K tokens · temp=0.3"]
 
-    IMG_PROMPT --> IMG_GEN["image_generation<br/>─────────────────<br/>• Call BFL FLUX API<br/>• 1200×1200 for LinkedIn<br/>• Save image to storage"]
+    IMG_PROMPT --> IMG_GEN["image_generation<br/>─────────────────<br/>• Call Lumnia2.0 Model<br/>• 1200×1200 for LinkedIn<br/>• Save image to storage"]
 
     IMG_GEN --> REVIEW["auto_review<br/>─────────────────<br/>7 Criteria (weighted):<br/>• Hook strength (20%)<br/>• Value density (15%)<br/>• Data points (15%)<br/>• Strategy alignment (15%)<br/>• Originality (15%)<br/>• CTA quality (10%)<br/>• Format compliance (10%)<br/>─────────────────<br/>GPT-4o · 4K tokens · temp=0.1"]
 
@@ -289,7 +289,7 @@ sequenceDiagram
     participant BG as Background Task
     participant HN as HackerNews API
     participant GPT as OpenAI GPT-4o
-    participant BFL as BFL FLUX
+    participant Lumnia Image 2.0
     participant RD as Redis
     participant FS as File Storage
 
@@ -337,7 +337,7 @@ sequenceDiagram
         BG->>GPT: Generate posts (8K, temp=0.7)
         GPT-->>BG: LinkedIn posts (7 formats)
         BG->>GPT: Image prompts (4K, temp=0.3)
-        GPT-->>BG: BFL FLUX prompts
+        GPT-->>BG: Lumnia Image 2.0 prompts
         BG->>BFL: Generate images (1200×1200)
         BFL-->>BG: Image URLs
         BG->>GPT: Auto-review (4K, temp=0.1)

@@ -1,0 +1,79 @@
+# Top-level compose file: runs the full stack.
+#   postgres (+ init-db.sql for role bootstrap)
+#   redis
+#   ai-service (FastAPI / LangGraph)
+#   backend    (NestJS API gateway)
+#
+# The ai-service project keeps its own `ai-service/docker-compose.yml`
+# for solo use; this file is for when you want the gateway too.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: scanner
+      POSTGRES_PASSWORD: scanner_pass
+      POSTGRES_DB: trending_scanner
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/docker/init-db.sql:/docker-entrypoint-initdb.d/10-init-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scanner -d trending_scanner"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ai-service:
+    build:
+      context: ./ai-service
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./ai-service/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ai_svc:ai_svc_pass@postgres:5432/trending_scanner
+      REDIS_URL: redis://redis:6379/0
+      BACKEND_ORIGIN: http://backend:3000
+      REQUIRE_INTERNAL_AUTH: "true"
+      INTERNAL_API_KEY: ${AI_SERVICE_INTERNAL_API_KEY:-change-me-internal}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./ai-service/app:/app/app
+      - ./ai-service/reports:/app/reports
+      - ./ai-service/strategy:/app/strategy
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://backend_svc:backend_pass@postgres:5432/trending_scanner?schema=app
+      AI_SERVICE_URL: http://ai-service:8000
+      AI_SERVICE_INTERNAL_API_KEY: ${AI_SERVICE_INTERNAL_API_KEY:-change-me-internal}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+
+volumes:
+  postgres_data:

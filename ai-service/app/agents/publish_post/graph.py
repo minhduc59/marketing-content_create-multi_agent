@@ -70,8 +70,12 @@ async def resolve_and_validate_node(state: PublishPostState) -> dict:
             raise ValueError(f"ContentPost {content_post_id} is already published")
 
         # Create published_post record
+        import uuid as _uuid
+
+        _user_id_raw = state.get("user_id") or ""
         pub = PublishedPost(
             content_post_id=post.id,
+            published_by=_uuid.UUID(_user_id_raw) if _user_id_raw else None,
             publish_mode=PublishMode(publish_mode),
             status=PublishStatus.PROCESSING,
             privacy_level=state.get("privacy_level", "SELF_ONLY"),

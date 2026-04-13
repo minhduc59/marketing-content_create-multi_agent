@@ -6,6 +6,7 @@ from typing import TypedDict
 class PublishPostState(TypedDict):
     # Input
     content_post_id: str
+    user_id: str                     # UUID of triggering user, "" if system/job
     publish_mode: str               # "auto" | "manual"
     scheduled_time_override: str     # ISO timestamp or "" for auto
     privacy_level: str

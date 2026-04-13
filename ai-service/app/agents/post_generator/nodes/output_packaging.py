@@ -162,7 +162,9 @@ async def _save_to_storage(scan_run_id: str, final_output: dict) -> list[str]:
     return saved_paths
 
 
-async def _persist_to_db(scan_run_id: str, final_output: dict) -> None:
+async def _persist_to_db(
+    scan_run_id: str, final_output: dict, user_id: str | None = None
+) -> None:
     """Save posts to the content_posts database table."""
     async with async_session_factory() as db:
         try:
@@ -190,6 +192,7 @@ async def _persist_to_db(scan_run_id: str, final_output: dict) -> None:
 
                 content_post = ContentPost(
                     scan_run_id=uuid.UUID(scan_run_id),
+                    created_by=uuid.UUID(user_id) if user_id else None,
                     format=fmt,
                     caption=post.get("caption", ""),
                     hashtags=post.get("hashtags", []),
@@ -247,7 +250,7 @@ async def output_packaging_node(state: PostGenState) -> dict:
 
     # Persist to DB
     try:
-        await _persist_to_db(scan_run_id, final_output)
+        await _persist_to_db(scan_run_id, final_output, state.get("user_id"))
     except Exception as e:
         logger.error("output_packaging: DB persist failed", error=str(e))
 

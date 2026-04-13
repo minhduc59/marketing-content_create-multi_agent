@@ -6,11 +6,12 @@ import uuid
 from datetime import datetime, timezone
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select
 
 from app.agents.publish_post.golden_hour import calculate_golden_hours
 from app.agents.publish_post.runner import run_publish_pipeline
+from app.api.v1.deps import get_current_user_id
 from app.api.v1.schemas.publish import (
     AutoPublishRequest,
     GoldenHoursResponse,
@@ -42,8 +43,9 @@ async def publish_now(
     post_id: str,
     body: ManualPublishRequest,
     background_tasks: BackgroundTasks,
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
-    await _validate_post_for_publish(post_id)
+    await _validate_post_for_publish(post_id, user_id)
 
     background_tasks.add_task(
         run_publish_pipeline,
@@ -51,6 +53,7 @@ async def publish_now(
         mode="manual",
         scheduled_time=None,
         privacy_level=body.privacy_level,
+        user_id=str(user_id),
     )
 
     return PublishAcceptedResponse(
@@ -72,8 +75,9 @@ async def schedule_publish(
     post_id: str,
     body: SchedulePublishRequest,
     background_tasks: BackgroundTasks,
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
-    await _validate_post_for_publish(post_id)
+    await _validate_post_for_publish(post_id, user_id)
 
     # Validate scheduled time is in the future
     now = datetime.now(timezone.utc)
@@ -89,6 +93,7 @@ async def schedule_publish(
         mode="manual",
         scheduled_time=scheduled_at,
         privacy_level=body.privacy_level,
+        user_id=str(user_id),
     )
 
     return PublishAcceptedResponse(
@@ -111,14 +116,16 @@ async def auto_publish(
     post_id: str,
     body: AutoPublishRequest,
     background_tasks: BackgroundTasks,
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
-    await _validate_post_for_publish(post_id)
+    await _validate_post_for_publish(post_id, user_id)
 
     background_tasks.add_task(
         run_publish_pipeline,
         content_post_id=post_id,
         mode="auto",
         privacy_level=body.privacy_level,
+        user_id=str(user_id),
     )
 
     return PublishAcceptedResponse(
@@ -134,13 +141,18 @@ async def auto_publish(
     status_code=200,
     summary="Cancel a scheduled publish",
 )
-async def cancel_scheduled_publish(post_id: str):
+async def cancel_scheduled_publish(
+    post_id: str,
+    user_id: uuid.UUID = Depends(get_current_user_id),
+):
     """Cancel a pending scheduled publish job."""
     async with async_session_factory() as db:
         result = await db.execute(
             select(PublishedPost).where(
                 PublishedPost.content_post_id == uuid.UUID(post_id),
                 PublishedPost.status == PublishStatus.PENDING,
+                (PublishedPost.published_by == user_id)
+                | (PublishedPost.published_by.is_(None)),
             ).order_by(PublishedPost.created_at.desc())
         )
         pub = result.scalar_one_or_none()
@@ -171,11 +183,19 @@ async def publish_history(
     status: str | None = Query(None, description="Filter by status"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
     """List all publish attempts with optional status filter."""
     async with async_session_factory() as db:
-        query = select(PublishedPost).order_by(PublishedPost.created_at.desc())
-        count_query = select(func.count(PublishedPost.id))
+        user_filter = (PublishedPost.published_by == user_id) | (
+            PublishedPost.published_by.is_(None)
+        )
+        query = (
+            select(PublishedPost)
+            .where(user_filter)
+            .order_by(PublishedPost.created_at.desc())
+        )
+        count_query = select(func.count(PublishedPost.id)).where(user_filter)
 
         if status:
             query = query.where(PublishedPost.status == status)
@@ -246,12 +266,17 @@ async def get_golden_hours():
     response_model=PublishStatusResponse,
     summary="Check publish status",
 )
-async def get_publish_status(published_post_id: str):
+async def get_publish_status(
+    published_post_id: str,
+    user_id: uuid.UUID = Depends(get_current_user_id),
+):
     """Get the current status of a specific publish attempt."""
     async with async_session_factory() as db:
         result = await db.execute(
             select(PublishedPost).where(
-                PublishedPost.id == uuid.UUID(published_post_id)
+                PublishedPost.id == uuid.UUID(published_post_id),
+                (PublishedPost.published_by == user_id)
+                | (PublishedPost.published_by.is_(None)),
             )
         )
         pub = result.scalar_one_or_none()
@@ -277,11 +302,14 @@ async def get_publish_status(published_post_id: str):
     )
 
 
-async def _validate_post_for_publish(post_id: str) -> None:
-    """Validate that a ContentPost exists and is eligible for publishing."""
+async def _validate_post_for_publish(post_id: str, user_id: uuid.UUID) -> None:
+    """Validate that a ContentPost exists, belongs to the user, and is eligible."""
     async with async_session_factory() as db:
         result = await db.execute(
-            select(ContentPost).where(ContentPost.id == uuid.UUID(post_id))
+            select(ContentPost).where(
+                ContentPost.id == uuid.UUID(post_id),
+                (ContentPost.created_by == user_id) | (ContentPost.created_by.is_(None)),
+            )
         )
         post = result.scalar_one_or_none()
 

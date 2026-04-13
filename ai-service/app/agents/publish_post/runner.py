@@ -18,6 +18,7 @@ async def run_publish_pipeline(
     mode: str = "auto",
     scheduled_time: datetime | None = None,
     privacy_level: str | None = None,
+    user_id: str | None = None,
 ) -> dict:
     """Run the Publish Post Agent pipeline.
 
@@ -27,6 +28,7 @@ async def run_publish_pipeline(
         scheduled_time: For manual mode — specific time to publish.
             If None in manual mode, publishes immediately.
         privacy_level: TikTok privacy level. Defaults to config value.
+        user_id: UUID of the triggering user. Propagated into PublishedPost.published_by.
 
     Returns:
         Dict with publish_status, published_post_id, and error info if any.
@@ -35,6 +37,7 @@ async def run_publish_pipeline(
 
     initial_state = PublishPostState(
         content_post_id=content_post_id,
+        user_id=user_id or "",
         publish_mode=mode,
         scheduled_time_override=scheduled_time.isoformat() if scheduled_time else "",
         privacy_level=privacy_level or settings.TIKTOK_DEFAULT_PRIVACY,

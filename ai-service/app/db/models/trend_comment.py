@@ -11,17 +11,20 @@ from app.db.models.enums import Sentiment
 
 class TrendComment(Base):
     __tablename__ = "trend_comments"
+    __table_args__ = {"schema": "ai"}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     trend_item_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("trend_items.id"), index=True
+        ForeignKey("ai.trend_items.id"), index=True
     )
     author: Mapped[str | None] = mapped_column(String(255), nullable=True)
     text: Mapped[str] = mapped_column(Text)
     likes: Mapped[int] = mapped_column(Integer, default=0)
-    sentiment: Mapped[Sentiment | None] = mapped_column(Enum(Sentiment), nullable=True)
+    sentiment: Mapped[Sentiment | None] = mapped_column(
+        Enum(Sentiment, values_callable=lambda e: [m.value for m in e]), nullable=True
+    )
     posted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

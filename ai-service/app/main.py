@@ -97,12 +97,15 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# CORS: once the NestJS gateway fronts all traffic we only need to allow it.
+# In development we still accept any origin so Swagger UI / local tools work.
+_cors_origins = [settings.BACKEND_ORIGIN] if settings.is_production else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "X-User-Id", "X-Internal-Api-Key", "X-Request-Id"],
 )
 
 # Static file serving for local development (images, reports, posts)

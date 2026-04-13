@@ -5,6 +5,7 @@ from typing import Annotated, TypedDict
 class PostGenState(TypedDict):
     # Inputs (set by runner before graph.ainvoke)
     scan_run_id: str
+    user_id: str | None  # UUID of the triggering user, for multi-user scoping
     options: dict  # {num_posts: 3, formats: [...], ...}
 
     # Loaded during strategy_alignment

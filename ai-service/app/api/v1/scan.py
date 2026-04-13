@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.deps import get_current_user_id, get_optional_user_id
 from app.api.v1.schemas.scan import ScanRequest, ScanResponse, ScanStatusResponse
 from app.db.models import ScanRun, ScanStatus
 from app.dependencies import get_session
@@ -48,10 +49,12 @@ async def trigger_scan(
     request: ScanRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_session),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
     scan_run = ScanRun(
         platforms_requested=[p.value for p in request.platforms],
         status=ScanStatus.PENDING,
+        triggered_by=user_id,
     )
     db.add(scan_run)
     await db.commit()
@@ -92,8 +95,14 @@ async def trigger_scan(
 async def get_scan_status(
     scan_id: uuid.UUID,
     db: AsyncSession = Depends(get_session),
+    user_id: uuid.UUID | None = Depends(get_optional_user_id),
 ):
-    result = await db.execute(select(ScanRun).where(ScanRun.id == scan_id))
+    stmt = select(ScanRun).where(ScanRun.id == scan_id)
+    if user_id is not None:
+        stmt = stmt.where(
+            (ScanRun.triggered_by == user_id) | (ScanRun.triggered_by.is_(None))
+        )
+    result = await db.execute(stmt)
     scan_run = result.scalar_one_or_none()
     if not scan_run:
         raise HTTPException(status_code=404, detail="Scan not found")

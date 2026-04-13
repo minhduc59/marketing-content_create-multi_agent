@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.deps import get_current_user_id, get_optional_user_id
 from app.api.v1.schemas.post import (
     PostDetail,
     PostGenRequest,
@@ -37,11 +38,14 @@ async def generate_posts(
     request: PostGenRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_session),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
-    # Validate scan run exists and is completed
-    result = await db.execute(
-        select(ScanRun).where(ScanRun.id == request.scan_run_id)
+    # Validate scan run exists, is completed, and belongs to the caller.
+    stmt = select(ScanRun).where(ScanRun.id == request.scan_run_id)
+    stmt = stmt.where(
+        (ScanRun.triggered_by == user_id) | (ScanRun.triggered_by.is_(None))
     )
+    result = await db.execute(stmt)
     scan_run = result.scalar_one_or_none()
 
     if not scan_run:
@@ -60,7 +64,9 @@ async def generate_posts(
         "num_posts": request.options.num_posts,
         "formats": [f.value for f in request.options.formats] if request.options.formats else None,
     }
-    background_tasks.add_task(run_post_generation, str(request.scan_run_id), options)
+    background_tasks.add_task(
+        run_post_generation, str(request.scan_run_id), options, str(user_id)
+    )
 
     return PostGenResponse(
         scan_run_id=request.scan_run_id,
@@ -82,8 +88,11 @@ async def list_posts(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_session),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
-    query = select(ContentPost)
+    query = select(ContentPost).where(
+        (ContentPost.created_by == user_id) | (ContentPost.created_by.is_(None))
+    )
 
     if scan_run_id:
         query = query.where(ContentPost.scan_run_id == scan_run_id)
@@ -122,9 +131,13 @@ async def list_posts(
 async def get_post(
     post_id: uuid.UUID,
     db: AsyncSession = Depends(get_session),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
     result = await db.execute(
-        select(ContentPost).where(ContentPost.id == post_id)
+        select(ContentPost).where(
+            ContentPost.id == post_id,
+            (ContentPost.created_by == user_id) | (ContentPost.created_by.is_(None)),
+        )
     )
     post = result.scalar_one_or_none()
 
@@ -144,9 +157,13 @@ async def update_post_status(
     post_id: uuid.UUID,
     body: PostStatusUpdate,
     db: AsyncSession = Depends(get_session),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
     result = await db.execute(
-        select(ContentPost).where(ContentPost.id == post_id)
+        select(ContentPost).where(
+            ContentPost.id == post_id,
+            (ContentPost.created_by == user_id) | (ContentPost.created_by.is_(None)),
+        )
     )
     post = result.scalar_one_or_none()
 
