@@ -6,10 +6,28 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { BoardCard } from "@/lib/pipeline/stages";
 import { COLUMN_CONFIG } from "@/lib/pipeline/stages";
-import type { TrendItem } from "@/lib/api/types";
+import { ScanStatus, type TrendItem } from "@/lib/api/types";
 import { getTrend } from "@/lib/api/trends";
 import { useReviewPost } from "@/hooks/api/use-posts";
 import { getMediaUrl } from "@/lib/config";
+
+const SCAN_STATUS_LABEL: Record<ScanStatus, { label: string; className: string }> = {
+  [ScanStatus.PENDING]:   { label: "Queued",    className: "bg-gray-100 text-gray-700 border-gray-200" },
+  [ScanStatus.RUNNING]:   { label: "Running",   className: "bg-blue-100 text-blue-700 border-blue-200" },
+  [ScanStatus.COMPLETED]: { label: "Completed", className: "bg-teal-100 text-teal-700 border-teal-200" },
+  [ScanStatus.PARTIAL]:   { label: "Partial",   className: "bg-amber-100 text-amber-700 border-amber-200" },
+  [ScanStatus.FAILED]:    { label: "Failed",    className: "bg-red-100 text-red-700 border-red-200" },
+};
+
+function formatDuration(ms: number | null): string {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${ms} ms`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return rem === 0 ? `${m}m` : `${m}m ${rem}s`;
+}
 
 const INTERNAL_STAGES = [
   "Crawled",
@@ -67,7 +85,9 @@ export function DetailSheet({ card, onClose }: Props) {
 
   if (!card) return null;
 
-  const { stage, post, publish } = card;
+  const { stage, post, publish, scan } = card;
+  const isScanCard = card.type === "scan";
+  const scanStatusCfg = scan ? SCAN_STATUS_LABEL[scan.status] : null;
   const colConfig = COLUMN_CONFIG[stage];
   const activeStep = STAGE_TO_STEP[stage] ?? 0;
   const isPendingReview = stage === "pending_review";
@@ -152,6 +172,82 @@ export function DetailSheet({ card, onClose }: Props) {
               })}
             </div>
           </section>
+
+          {/* Scan run details */}
+          {isScanCard && scan && (
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scan Run</h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 p-2.5">
+                  <span className="text-xs text-muted-foreground">Status</span>
+                  {scanStatusCfg && (
+                    <span className={cn(
+                      "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+                      scanStatusCfg.className
+                    )}>
+                      {scanStatusCfg.label}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "Articles found", value: String(scan.totalItemsFound) },
+                    { label: "Duration",       value: formatDuration(scan.durationMs) },
+                    { label: "Started",        value: format(new Date(scan.startedAt), "MMM d, h:mm a") },
+                    { label: "Completed",      value: scan.completedAt ? format(new Date(scan.completedAt), "MMM d, h:mm a") : "—" },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="rounded-md border border-border bg-muted/30 p-2">
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p className="mt-0.5 text-sm font-medium">{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-md border border-border bg-muted/30 p-2.5">
+                  <p className="mb-1 text-xs text-muted-foreground">Platforms</p>
+                  <div className="flex flex-wrap gap-1">
+                    {scan.platformsRequested.length === 0 && (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                    {scan.platformsRequested.map((p) => {
+                      const completed = scan.platformsCompleted.includes(p);
+                      const failed = p in scan.platformsFailed;
+                      return (
+                        <span
+                          key={p}
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-xs font-medium",
+                            failed   ? "bg-red-50 text-red-700 border-red-200" :
+                            completed? "bg-teal-50 text-teal-700 border-teal-200" :
+                                       "bg-muted text-muted-foreground border-border"
+                          )}
+                        >
+                          {p}{failed ? " · failed" : completed ? " · done" : ""}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+                {scan.error && (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-2.5">
+                    <p className="text-xs font-semibold text-red-700">Error</p>
+                    <p className="mt-1 text-xs text-red-700/90 break-words">{scan.error}</p>
+                  </div>
+                )}
+                {Object.keys(scan.platformsFailed).length > 0 && (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-2.5">
+                    <p className="text-xs font-semibold text-red-700">Platform errors</p>
+                    <ul className="mt-1 space-y-0.5 text-xs text-red-700/90">
+                      {Object.entries(scan.platformsFailed).map(([platform, err]) => (
+                        <li key={platform} className="break-words">
+                          <span className="font-mono">{platform}:</span> {err}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* Analysis metadata */}
           {canShowAnalysis && trend && (

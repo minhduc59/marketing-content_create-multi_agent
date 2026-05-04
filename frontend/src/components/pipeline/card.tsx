@@ -5,7 +5,17 @@ import { formatDistanceToNow, format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { BoardCard } from "@/lib/pipeline/stages";
 import { isActiveStage } from "@/lib/pipeline/stages";
-import type { EngagementPrediction } from "@/lib/api/types";
+import { ScanStatus, type EngagementPrediction } from "@/lib/api/types";
+
+const PLATFORM_LABEL: Record<string, string> = {
+  hackernews: "HackerNews",
+  url: "Article URL",
+};
+
+function formatPlatforms(platforms: string[]): string {
+  if (platforms.length === 0) return "—";
+  return platforms.map((p) => PLATFORM_LABEL[p] ?? p).join(", ");
+}
 
 const ENGAGEMENT_CONFIG: Record<EngagementPrediction, { label: string; className: string }> = {
   viral:  { label: "Viral",   className: "bg-red-100 text-red-700 border-red-200" },
@@ -14,12 +24,41 @@ const ENGAGEMENT_CONFIG: Record<EngagementPrediction, { label: string; className
   low:    { label: "Low",     className: "bg-gray-100 text-gray-600 border-gray-200" },
 };
 
+const SCAN_STATUS_CONFIG: Record<ScanStatus, { label: string; className: string }> = {
+  [ScanStatus.PENDING]:   { label: "Queued",    className: "bg-gray-100 text-gray-700 border-gray-200" },
+  [ScanStatus.RUNNING]:   { label: "Running",   className: "bg-blue-100 text-blue-700 border-blue-200" },
+  [ScanStatus.COMPLETED]: { label: "Completed", className: "bg-teal-100 text-teal-700 border-teal-200" },
+  [ScanStatus.PARTIAL]:   { label: "Partial",   className: "bg-amber-100 text-amber-700 border-amber-200" },
+  [ScanStatus.FAILED]:    { label: "Failed",    className: "bg-red-100 text-red-700 border-red-200" },
+};
+
 function deriveSubLabel(card: BoardCard): string {
   const { stage, post, publish, scan } = card;
   switch (stage) {
-    case "scanning":
-      if (scan) return `Scanning · ${scan.totalItemsFound} articles`;
-      return "Step 1/3 · Crawling...";
+    case "scanning": {
+      if (!scan) return "Step 1/3 · Crawling...";
+      const platforms = formatPlatforms(scan.platformsRequested);
+      const found = scan.totalItemsFound;
+      switch (scan.status) {
+        case ScanStatus.PENDING:
+          return `${platforms} · Queued`;
+        case ScanStatus.RUNNING: {
+          const done = scan.platformsCompleted.length;
+          const total = scan.platformsRequested.length || 1;
+          return found > 0
+            ? `${platforms} · ${found} articles · ${done}/${total}`
+            : `${platforms} · Crawling… ${done}/${total}`;
+        }
+        case ScanStatus.FAILED:
+          return scan.error ? `Failed · ${scan.error}` : "Failed";
+        case ScanStatus.PARTIAL:
+          return `Partial · ${found} articles · ${platforms}`;
+        case ScanStatus.COMPLETED:
+          return `Completed · ${found} articles`;
+        default:
+          return `${platforms} · ${found} articles`;
+      }
+    }
     case "generating":
       if (post && post.revisionCount > 0) return `Revision ${post.revisionCount} · Refining`;
       return "Step 2/3 · Analyzing...";
@@ -68,6 +107,7 @@ export function PipelineCard({ card, onClick, isDragOverlay }: Props) {
   const active = isActiveStage(stage);
   const subLabel = deriveSubLabel(card);
   const engagementCfg = engagementPrediction ? ENGAGEMENT_CONFIG[engagementPrediction] : null;
+  const scanStatusCfg = card.type === "scan" && card.scan ? SCAN_STATUS_CONFIG[card.scan.status] : null;
 
   return (
     <div
@@ -90,7 +130,14 @@ export function PipelineCard({ card, onClick, isDragOverlay }: Props) {
         <p className="line-clamp-2 text-sm font-medium leading-snug">{card.title}</p>
         <p className="text-xs text-muted-foreground">{subLabel}</p>
         <div className="flex items-center justify-between gap-2 pt-0.5">
-          {engagementCfg ? (
+          {scanStatusCfg ? (
+            <span className={cn(
+              "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+              scanStatusCfg.className
+            )}>
+              {scanStatusCfg.label}
+            </span>
+          ) : engagementCfg ? (
             <span className={cn(
               "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
               engagementCfg.className
