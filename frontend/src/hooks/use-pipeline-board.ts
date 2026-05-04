@@ -34,19 +34,38 @@ export function usePipelineBoard(sourceFilter: SourceFilter = "all") {
       scanMap.set(s.id, s.platformsRequested);
     }
 
-    // Scan cards (Scanning column) — active scan runs
+    // Scan cards (Scanning column) — active runs + recently failed runs
+    const FAILED_VISIBILITY_MS = 10 * 60 * 1000; // keep failures visible for 10 min
+    const now = Date.now();
     const scanCards: BoardCard[] = scans
-      .filter((s) => s.status === ScanStatus.RUNNING || s.status === ScanStatus.PENDING)
-      .map((s) => ({
-        id: `scan-${s.id}`,
-        type: "scan" as const,
-        stage: "scanning" as PipelineStage,
-        source: "hackernews" as const,
-        title: `Scan · ${s.totalItemsFound} articles found`,
-        engagementPrediction: null,
-        createdAt: s.startedAt,
-        scan: s,
-      }));
+      .filter((s) => {
+        if (s.status === ScanStatus.RUNNING || s.status === ScanStatus.PENDING) return true;
+        if (s.status === ScanStatus.FAILED) {
+          const ts = new Date(s.completedAt ?? s.startedAt).getTime();
+          return now - ts < FAILED_VISIBILITY_MS;
+        }
+        return false;
+      })
+      .map((s) => {
+        const platforms = s.platformsRequested.join(", ") || "unknown";
+        const title =
+          s.status === ScanStatus.FAILED
+            ? `Scan failed · ${platforms}`
+            : s.status === ScanStatus.PENDING
+            ? `Scan queued · ${platforms}`
+            : `Scanning ${platforms}`;
+        const source = s.platformsRequested.includes("hackernews") ? "hackernews" : "url";
+        return {
+          id: `scan-${s.id}`,
+          type: "scan" as const,
+          stage: "scanning" as PipelineStage,
+          source: source as "hackernews" | "url",
+          title,
+          engagementPrediction: null,
+          createdAt: s.startedAt,
+          scan: s,
+        };
+      });
 
     // Post cards
     const postCards: BoardCard[] = posts.map((post) => {
