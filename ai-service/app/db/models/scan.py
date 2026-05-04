@@ -20,7 +20,7 @@ class ScanRun(Base):
         UUID(as_uuid=True), nullable=True, index=True
     )
     status: Mapped[ScanStatus] = mapped_column(
-        Enum(ScanStatus, values_callable=lambda e: [m.value for m in e]),
+        Enum(ScanStatus, name="ScanStatus", schema="ai", values_callable=lambda e: [m.value for m in e]),
         default=ScanStatus.PENDING,
     )
     platforms_requested: Mapped[list] = mapped_column(JSON, default=list)
@@ -37,6 +37,8 @@ class ScanRun(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str | None] = mapped_column(String, nullable=True)
     report_file_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
 
     trend_items: Mapped[list["TrendItem"]] = relationship(
         back_populates="scan_run", cascade="all, delete-orphan"

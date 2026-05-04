@@ -46,6 +46,7 @@ model User {
   identities    AuthIdentity[]
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
+  reviewEvents  PostReviewEvent[]
 
   @@map("users")
   @@schema("app")
@@ -78,6 +79,29 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+  @@schema("app")
+}
+
+enum PostReviewAction {
+  approve
+  reject
+
+  @@schema("app")
+}
+
+model PostReviewEvent {
+  id            String           @id @default(uuid()) @db.Uuid
+  contentPostId String           @map("content_post_id") @db.Uuid
+  userId        String           @map("user_id") @db.Uuid
+  action        PostReviewAction
+  feedback      String?
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([contentPostId])
+  @@index([userId])
+  @@map("post_review_events")
   @@schema("app")
 }
 

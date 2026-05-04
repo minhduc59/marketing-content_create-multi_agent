@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from firecrawl import FirecrawlApp
+from firecrawl import V1V1FirecrawlApp
 
 HN_API_BASE = "https://hacker-news.firebaseio.com/v0"
 MAX_CONCURRENT_FETCHES = 10
@@ -61,11 +61,11 @@ NON_TECH_PATTERNS = [
 ]
 
 
-def _init_firecrawl() -> FirecrawlApp:
+def _init_firecrawl() -> V1FirecrawlApp:
     api_key = os.getenv("FIRECRAWL_API_KEY", "")
     if not api_key:
         print("WARNING: FIRECRAWL_API_KEY not set. Firecrawl calls will fail.", file=sys.stderr)
-    return FirecrawlApp(api_key=api_key)
+    return V1FirecrawlApp(api_key=api_key)
 
 
 def is_tech_related(title: str, text: str) -> bool:
@@ -159,19 +159,19 @@ async def fetch_story(client: httpx.AsyncClient, story_id: int) -> dict | None:
         return None
 
 
-async def crawl_article(firecrawl: FirecrawlApp, url: str) -> dict | None:
+async def crawl_article(firecrawl: V1FirecrawlApp, url: str) -> dict | None:
     try:
         result = await asyncio.to_thread(
             firecrawl.scrape_url,
             url,
-            params={"formats": ["markdown"]},
+            formats=["markdown"],
         )
 
-        markdown = result.get("markdown", "")
+        markdown = (result.markdown or "") if result else ""
         if len(markdown.split()) < MIN_CONTENT_WORDS:
             return None
 
-        metadata = result.get("metadata", {})
+        metadata = (result.metadata or {}) if result else {}
         return {
             "full_text": markdown,
             "og_image": metadata.get("og:image", ""),

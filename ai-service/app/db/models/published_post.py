@@ -31,11 +31,11 @@ class PublishedPost(Base):
 
     # Publish configuration
     publish_mode: Mapped[PublishMode] = mapped_column(
-        Enum(PublishMode, values_callable=lambda e: [m.value for m in e]),
+        Enum(PublishMode, name="PublishMode", schema="ai", values_callable=lambda e: [m.value for m in e]),
         nullable=False,
     )
     status: Mapped[PublishStatus] = mapped_column(
-        Enum(PublishStatus, values_callable=lambda e: [m.value for m in e]),
+        Enum(PublishStatus, name="PublishStatus", schema="ai", values_callable=lambda e: [m.value for m in e]),
         default=PublishStatus.PENDING,
     )
     privacy_level: Mapped[str] = mapped_column(

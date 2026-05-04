@@ -5,8 +5,12 @@ import {
   getPost,
   generatePosts,
   updatePostStatus,
+  createPostFromArticle,
+  reviewPost,
+  type ArticleInput,
 } from "@/lib/api/posts";
 import type { ContentStatus, PostFilters, PostGenRequest } from "@/lib/api/types";
+import { usePipelineStore } from "@/stores/pipeline-store";
 
 export function usePosts(params?: PostFilters) {
   return useQuery({
@@ -38,6 +42,25 @@ export function useGeneratePosts() {
   });
 }
 
+export function useCreatePostFromArticle() {
+  const queryClient = useQueryClient();
+  const setActiveScan = usePipelineStore((s) => s.setActiveScan);
+  return useMutation({
+    mutationFn: (payload: ArticleInput) => createPostFromArticle(payload),
+    onSuccess: (res) => {
+      setActiveScan(res.scan_run_id);
+      queryClient.invalidateQueries({ queryKey: ["scans"] });
+      toast.success("Article submitted — generating posts");
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Failed to submit article";
+      toast.error(msg);
+    },
+  });
+}
+
 export function useUpdatePostStatus() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -50,5 +73,18 @@ export function useUpdatePostStatus() {
     onError: () => {
       toast.error("Failed to update post status");
     },
+  });
+}
+
+export function useReviewPost() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, action, feedback }: { id: string; action: "approve" | "reject"; feedback?: string }) =>
+      reviewPost(id, { action, feedback }),
+    onSuccess: (_, { action }) => {
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      toast.success(action === "approve" ? "Post approved" : "Post sent back for revision");
+    },
+    onError: () => toast.error("Review action failed"),
   });
 }

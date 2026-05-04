@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user_id, get_optional_user_id
 from app.api.v1.schemas.post import (
+    FromArticleRequest,
+    FromArticleResponse,
     PostDetail,
     PostGenRequest,
     PostGenResponse,
@@ -17,6 +19,10 @@ from app.api.v1.schemas.post import (
 )
 from app.db.models import ContentPost, ContentStatus, PostFormat, ScanRun, ScanStatus
 from app.dependencies import get_session
+from app.services.article_pipeline import (
+    create_scan_for_article,
+    run_article_pipeline,
+)
 
 router = APIRouter()
 
@@ -72,6 +78,46 @@ async def generate_posts(
         scan_run_id=request.scan_run_id,
         status="accepted",
         message=f"Post generation started for scan {request.scan_run_id}",
+    )
+
+
+@router.post(
+    "/from-article",
+    status_code=202,
+    response_model=FromArticleResponse,
+    summary="Generate TikTok posts from a single article URL",
+    description=(
+        "Express pipeline: crawls the article, builds a Stage-3-equivalent "
+        "report, then invokes the existing post-generation graph. "
+        "Skips trend scanning entirely.\n\n"
+        "Returns 202 immediately with a scan_run_id the client can subscribe "
+        "to via the WebSocket gateway (`scan:<id>` room) to follow progress."
+    ),
+)
+async def create_post_from_article(
+    request: FromArticleRequest,
+    background_tasks: BackgroundTasks,
+    user_id: uuid.UUID = Depends(get_current_user_id),
+):
+    url_str = str(request.url)
+    scan_run_id = await create_scan_for_article(url_str, user_id)
+
+    options = {
+        "num_posts": request.options.num_posts,
+        "formats": (
+            [f.value for f in request.options.formats]
+            if request.options.formats
+            else None
+        ),
+    }
+    background_tasks.add_task(
+        run_article_pipeline, scan_run_id, url_str, options, user_id
+    )
+
+    return FromArticleResponse(
+        scan_run_id=scan_run_id,
+        status="accepted",
+        message=f"Article pipeline started for {url_str}",
     )
 
 

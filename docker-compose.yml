@@ -55,6 +55,7 @@ services:
         condition: service_healthy
     volumes:
       - ./ai-service/app:/app/app
+      - ./ai-service/posts:/app/posts
       - ./ai-service/reports:/app/reports
       - ./ai-service/strategy:/app/strategy
 

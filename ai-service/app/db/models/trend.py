@@ -42,7 +42,7 @@ class TrendItem(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    platform: Mapped[Platform] = mapped_column(Enum(Platform, values_callable=lambda e: [m.value for m in e]))
+    platform: Mapped[Platform] = mapped_column(Enum(Platform, name="AiPlatform", schema="ai", values_callable=lambda e: [m.value for m in e]))
 
     # Tags
     tags: Mapped[list] = mapped_column(JSON, default=list)
@@ -68,10 +68,10 @@ class TrendItem(Base):
     # AI analysis (populated by TrendAnalyzer)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sentiment: Mapped[Sentiment | None] = mapped_column(
-        Enum(Sentiment, values_callable=lambda e: [m.value for m in e]), nullable=True
+        Enum(Sentiment, name="Sentiment", schema="ai", values_callable=lambda e: [m.value for m in e]), nullable=True
     )
     lifecycle: Mapped[TrendLifecycle | None] = mapped_column(
-        Enum(TrendLifecycle, values_callable=lambda e: [m.value for m in e]), nullable=True
+        Enum(TrendLifecycle, name="TrendLifecycle", schema="ai", values_callable=lambda e: [m.value for m in e]), nullable=True
     )
     relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -79,11 +79,11 @@ class TrendItem(Base):
 
     # Enhanced analysis fields
     engagement_prediction: Mapped[EngagementPrediction | None] = mapped_column(
-        Enum(EngagementPrediction, values_callable=lambda e: [m.value for m in e]),
+        Enum(EngagementPrediction, name="EngagementPrediction", schema="ai", values_callable=lambda e: [m.value for m in e]),
         nullable=True,
     )
     source_type: Mapped[SourceType | None] = mapped_column(
-        Enum(SourceType, values_callable=lambda e: [m.value for m in e]),
+        Enum(SourceType, name="SourceType", schema="ai", values_callable=lambda e: [m.value for m in e]),
         nullable=True,
     )
     content_angles: Mapped[list] = mapped_column(JSON, default=list)
