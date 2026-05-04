@@ -1,6 +1,7 @@
 "use client";
 
-import { Radar, FileText, Send, Activity, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Radar, FileText, Send, Activity, Loader2, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
 
@@ -9,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ContentStatusBadge } from "@/components/ui/content-status-badge";
+import { ArticleUrlModal } from "@/components/dashboard/article-url-modal";
 import { useTriggerScan } from "@/hooks/api/use-scans";
 import { usePosts } from "@/hooks/api/use-posts";
 import { useTopTrends } from "@/hooks/api/use-trends";
@@ -40,6 +42,7 @@ export default function DashboardPage() {
   const triggerScan = useTriggerScan();
   const pipelineStatus = usePipelineStore((s) => s.status);
   const keywords = useSettingsStore((s) => s.keywords);
+  const [articleOpen, setArticleOpen] = useState(false);
 
   function handleStartScan() {
     const dto: TriggerScanDto = {
@@ -59,13 +62,21 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <Button onClick={handleStartScan} disabled={triggerScan.isPending}>
-          {triggerScan.isPending && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          )}
-          Start New Scan
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setArticleOpen(true)}>
+            <Link2 className="mr-2 h-4 w-4" />
+            From Article URL
+          </Button>
+          <Button onClick={handleStartScan} disabled={triggerScan.isPending}>
+            {triggerScan.isPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            Start New Scan
+          </Button>
+        </div>
       </div>
+
+      <ArticleUrlModal open={articleOpen} onOpenChange={setArticleOpen} />
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

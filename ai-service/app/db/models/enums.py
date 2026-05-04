@@ -11,6 +11,7 @@ class ScanStatus(str, enum.Enum):
 
 class Platform(str, enum.Enum):
     HACKERNEWS = "hackernews"
+    ARTICLE = "article"
 
 
 class Sentiment(str, enum.Enum):

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Radar,
+  KanbanSquare,
   FileText,
   Image,
   Calendar,
@@ -27,6 +28,7 @@ import { SidebarItem } from "./sidebar-item";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/trends", label: "Trends", icon: Radar },
+  { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { href: "/content", label: "Content", icon: FileText },
   { href: "/media", label: "Media", icon: Image },
   { href: "/schedule", label: "Schedule", icon: Calendar },

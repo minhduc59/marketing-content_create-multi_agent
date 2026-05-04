@@ -23,7 +23,7 @@ class TrendComment(Base):
     text: Mapped[str] = mapped_column(Text)
     likes: Mapped[int] = mapped_column(Integer, default=0)
     sentiment: Mapped[Sentiment | None] = mapped_column(
-        Enum(Sentiment, values_callable=lambda e: [m.value for m in e]), nullable=True
+        Enum(Sentiment, name="Sentiment", schema="ai", values_callable=lambda e: [m.value for m in e]), nullable=True
     )
     posted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

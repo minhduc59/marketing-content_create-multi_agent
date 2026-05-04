@@ -1,11 +1,11 @@
 from functools import lru_cache
 
-from firecrawl import FirecrawlApp
+from firecrawl import V1FirecrawlApp
 
 from app.config import get_settings
 
 
 @lru_cache
-def get_firecrawl() -> FirecrawlApp:
+def get_firecrawl() -> V1FirecrawlApp:
     settings = get_settings()
-    return FirecrawlApp(api_key=settings.FIRECRAWL_API_KEY)
+    return V1FirecrawlApp(api_key=settings.FIRECRAWL_API_KEY)

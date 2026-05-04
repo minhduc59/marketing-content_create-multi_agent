@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ContentStatusBadge } from "@/components/ui/content-status-badge";
 import { usePost } from "@/hooks/api/use-posts";
+import { getMediaUrl } from "@/lib/config";
 
 export default function MediaDetailPage({
   params,
@@ -51,29 +52,37 @@ export default function MediaDetailPage({
         {/* Image Preview */}
         <Card>
           <CardContent className="p-4">
-            <Tabs defaultValue="feed">
-              <TabsList className="mb-4">
-                <TabsTrigger value="feed">Feed 1:1</TabsTrigger>
-                <TabsTrigger value="story">Story 9:16</TabsTrigger>
-                <TabsTrigger value="wide">Wide 1.91:1</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="feed">
-                <div className="aspect-square bg-muted flex items-center justify-center">
-                  <ImageIcon className="h-16 w-16 text-muted-foreground/30" />
-                </div>
-              </TabsContent>
-              <TabsContent value="story">
-                <div className="aspect-[9/16] max-h-[500px] bg-muted flex items-center justify-center">
-                  <ImageIcon className="h-16 w-16 text-muted-foreground/30" />
-                </div>
-              </TabsContent>
-              <TabsContent value="wide">
-                <div className="aspect-[1.91/1] bg-muted flex items-center justify-center">
-                  <ImageIcon className="h-16 w-16 text-muted-foreground/30" />
-                </div>
-              </TabsContent>
-            </Tabs>
+            {post.imagePath ? (
+              <Tabs defaultValue="feed">
+                <TabsList className="mb-4">
+                  <TabsTrigger value="feed">Feed 1:1</TabsTrigger>
+                  <TabsTrigger value="story">Story 9:16</TabsTrigger>
+                  <TabsTrigger value="wide">Wide 1.91:1</TabsTrigger>
+                </TabsList>
+                <TabsContent value="feed">
+                  <div className="aspect-square overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getMediaUrl(post.imagePath)!} alt={post.trendTitle} className="h-full w-full rounded-md border border-border object-cover" />
+                  </div>
+                </TabsContent>
+                <TabsContent value="story">
+                  <div className="aspect-[9/16] max-h-[500px] overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getMediaUrl(post.imagePath)!} alt={post.trendTitle} className="h-full w-full rounded-md border border-border object-cover" />
+                  </div>
+                </TabsContent>
+                <TabsContent value="wide">
+                  <div className="aspect-[1.91/1] overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getMediaUrl(post.imagePath)!} alt={post.trendTitle} className="h-full w-full rounded-md border border-border object-cover" />
+                  </div>
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <div className="aspect-square bg-muted flex items-center justify-center rounded-md">
+                <ImageIcon className="h-16 w-16 text-muted-foreground/30" />
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -108,10 +117,14 @@ export default function MediaDetailPage({
             </CardContent>
           </Card>
 
-          <Button variant="outline" className="w-full">
-            <Download className="mr-2 h-4 w-4" />
-            Download Image
-          </Button>
+          {post.imagePath && (
+            <Button variant="outline" className="w-full" asChild>
+              <a href={getMediaUrl(post.imagePath)!} download target="_blank" rel="noopener noreferrer">
+                <Download className="mr-2 h-4 w-4" />
+                Download Image
+              </a>
+            </Button>
+          )}
         </div>
       </div>
     </div>

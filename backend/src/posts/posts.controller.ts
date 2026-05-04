@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   NotFoundException,
   Param,
   Patch,
@@ -25,6 +26,8 @@ import {
   CurrentUser,
   CurrentUserPayload,
 } from '../auth/decorators/current-user.decorator';
+import { CreateFromArticleDto } from './dto/create-from-article.dto';
+import { ReviewPostDto } from './dto/review-post.dto';
 
 const CONTENT_STATUSES = [
   'draft',
@@ -140,6 +143,20 @@ export class PostsController {
     return this.ai.generatePosts(user.userId, body);
   }
 
+  @Post('from-article')
+  @HttpCode(202)
+  @ApiOperation({
+    summary: 'Generate posts from a single article URL (express pipeline)',
+    description:
+      'Crawls the article, builds a Stage-3-equivalent report, and runs the standard post-generation pipeline. Returns 202 with a `scan_run_id` the client can subscribe to via WebSocket (`scan:<id>`).',
+  })
+  fromArticle(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreateFromArticleDto,
+  ) {
+    return this.ai.createPostFromArticle(user.userId, dto);
+  }
+
   /**
    * Narrow write path into `ai.content_posts`. This is one of the
    * documented mutation surfaces the backend DB role has grant on.
@@ -179,5 +196,58 @@ export class PostsController {
       }),
     ]);
     return updated;
+  }
+
+  @Post(':id/review')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Approve or reject a post, writing to post_review_events',
+  })
+  @ApiParam({ name: 'id', description: 'Content post ID (UUID).' })
+  async review(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') id: string,
+    @Body() dto: ReviewPostDto,
+  ) {
+    const existing = await this.prisma.contentPost.findFirst({
+      where: { id, createdBy: user.userId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Post not found');
+
+    const newStatus =
+      dto.action === 'approve'
+        ? ContentStatus.approved
+        : ContentStatus.needs_revision;
+
+    await this.prisma.$transaction([
+      this.prisma.contentPost.update({
+        where: { id },
+        data: {
+          status: newStatus,
+          ...(dto.feedback && { reviewNotes: dto.feedback }),
+          updatedAt: new Date(),
+        },
+      }),
+      this.prisma.postReviewEvent.create({
+        data: {
+          contentPostId: id,
+          userId: user.userId,
+          action: dto.action,
+          feedback: dto.feedback,
+        },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          userId: user.userId,
+          action: `post.review.${dto.action}`,
+          resource: 'content_post',
+          resourceId: id,
+          metadata: { action: dto.action, feedback: dto.feedback },
+        },
+      }),
+    ]);
+
+    return { id, status: newStatus, action: dto.action };
   }
 }

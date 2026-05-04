@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 from app.db.models.enums import ContentStatus, PostFormat
 
@@ -21,6 +21,17 @@ class PostGenRequest(BaseModel):
 
 
 class PostGenResponse(BaseModel):
+    scan_run_id: uuid.UUID
+    status: str
+    message: str
+
+
+class FromArticleRequest(BaseModel):
+    url: HttpUrl = Field(description="Public URL of the article to crawl")
+    options: PostGenOptions = Field(default_factory=PostGenOptions)
+
+
+class FromArticleResponse(BaseModel):
     scan_run_id: uuid.UUID
     status: str
     message: str

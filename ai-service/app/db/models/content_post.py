@@ -29,7 +29,7 @@ class ContentPost(Base):
 
     # Content
     format: Mapped[PostFormat] = mapped_column(
-        Enum(PostFormat, values_callable=lambda e: [m.value for m in e]), nullable=False
+        Enum(PostFormat, name="PostFormat", schema="ai", values_callable=lambda e: [m.value for m in e]), nullable=False
     )
     caption: Mapped[str] = mapped_column(Text, nullable=False)
     hashtags: Mapped[list] = mapped_column(JSON, default=list)
@@ -52,7 +52,7 @@ class ContentPost(Base):
 
     # Review
     status: Mapped[ContentStatus] = mapped_column(
-        Enum(ContentStatus, values_callable=lambda e: [m.value for m in e]),
+        Enum(ContentStatus, name="ContentStatus", schema="ai", values_callable=lambda e: [m.value for m in e]),
         default=ContentStatus.DRAFT,
     )
     review_score: Mapped[float | None] = mapped_column(Float, nullable=True)

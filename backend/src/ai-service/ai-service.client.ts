@@ -85,6 +85,9 @@ export class AiServiceClient {
   generatePosts(userId: string, body: unknown) {
     return this.request('POST', '/api/v1/posts/generate', userId, body);
   }
+  createPostFromArticle(userId: string, body: unknown) {
+    return this.request('POST', '/api/v1/posts/from-article', userId, body);
+  }
 
   // ---- Publish
   publishNow(userId: string, postId: string, body: unknown) {
