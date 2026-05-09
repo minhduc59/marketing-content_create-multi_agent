@@ -6,7 +6,7 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   const config = app.get(ConfigService);
 
   app.setGlobalPrefix('v1');
@@ -59,6 +59,7 @@ async function bootstrap() {
     .addTag('Publish', 'Publish posts to TikTok (now, schedule, auto, history)')
     .addTag('Reports', 'Per-scan markdown reports and summaries')
     .addTag('TikTok Auth', 'TikTok OAuth handshake (proxied to ai-service)')
+    .addTag('Publisher', 'Provider-agnostic TikTok publishing (Zernio): profile setup, TikTok linking, webhooks')
     .addTag('Health', 'Liveness probe')
     .build();
 

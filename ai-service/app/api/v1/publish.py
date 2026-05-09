@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
+import httpx
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -12,6 +13,7 @@ from sqlalchemy import func, select
 from app.agents.publish_post.golden_hour import calculate_golden_hours
 from app.agents.publish_post.runner import run_publish_pipeline
 from app.api.v1.deps import get_current_user_id
+from app.config import get_settings
 from app.api.v1.schemas.publish import (
     AutoPublishRequest,
     GoldenHoursResponse,
@@ -24,7 +26,7 @@ from app.api.v1.schemas.publish import (
     SchedulePublishRequest,
 )
 from app.db.models.content_post import ContentPost
-from app.db.models.enums import ContentStatus, PublishStatus
+from app.db.models.enums import ContentStatus, PublishMode, PublishStatus
 from app.db.models.published_post import PublishedPost
 from app.db.session import async_session_factory
 
@@ -47,6 +49,13 @@ async def publish_now(
 ):
     await _validate_post_for_publish(post_id, user_id)
 
+    published_post_id = await _create_published_post_row(
+        content_post_id=post_id,
+        user_id=user_id,
+        mode=PublishMode.MANUAL,
+        privacy_level=body.privacy_level,
+    )
+
     background_tasks.add_task(
         run_publish_pipeline,
         content_post_id=post_id,
@@ -54,13 +63,14 @@ async def publish_now(
         scheduled_time=None,
         privacy_level=body.privacy_level,
         user_id=str(user_id),
+        published_post_id=published_post_id,
     )
 
     return PublishAcceptedResponse(
-        published_post_id="pending",
+        published_post_id=published_post_id,
         mode="manual",
         status="processing",
-        message="Post submitted for immediate publishing. Check status via GET /publish/history.",
+        message="Post submitted for immediate publishing. Check status via GET /publish/{id}/status.",
     )
 
 
@@ -87,6 +97,13 @@ async def schedule_publish(
     if scheduled_at <= now:
         raise HTTPException(status_code=400, detail="scheduled_at must be in the future")
 
+    published_post_id = await _create_published_post_row(
+        content_post_id=post_id,
+        user_id=user_id,
+        mode=PublishMode.MANUAL,
+        privacy_level=body.privacy_level,
+    )
+
     background_tasks.add_task(
         run_publish_pipeline,
         content_post_id=post_id,
@@ -94,10 +111,11 @@ async def schedule_publish(
         scheduled_time=scheduled_at,
         privacy_level=body.privacy_level,
         user_id=str(user_id),
+        published_post_id=published_post_id,
     )
 
     return PublishAcceptedResponse(
-        published_post_id="pending",
+        published_post_id=published_post_id,
         mode="manual",
         status="scheduled",
         scheduled_at=scheduled_at,
@@ -120,16 +138,24 @@ async def auto_publish(
 ):
     await _validate_post_for_publish(post_id, user_id)
 
+    published_post_id = await _create_published_post_row(
+        content_post_id=post_id,
+        user_id=user_id,
+        mode=PublishMode.AUTO,
+        privacy_level=body.privacy_level,
+    )
+
     background_tasks.add_task(
         run_publish_pipeline,
         content_post_id=post_id,
         mode="auto",
         privacy_level=body.privacy_level,
         user_id=str(user_id),
+        published_post_id=published_post_id,
     )
 
     return PublishAcceptedResponse(
-        published_post_id="pending",
+        published_post_id=published_post_id,
         mode="auto",
         status="processing",
         message="Post submitted for golden hour scheduling.",
@@ -161,12 +187,22 @@ async def cancel_scheduled_publish(
             raise HTTPException(status_code=404, detail="No pending scheduled publish found for this post")
 
         # Cancel APScheduler job if exists
-        if pub.scheduler_job_id:
+        # Cancel on Zernio via backend if there's a submitted post ID
+        if pub.tiktok_publish_id:
+            settings = get_settings()
+            backend_url = settings.BACKEND_ORIGIN.rstrip("/")
             try:
-                from app.main import app
-                app.state.scheduler.remove_job(pub.scheduler_job_id)
-            except Exception:
-                pass  # Job may have already fired or been removed
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.delete(
+                        f"{backend_url}/v1/publisher/internal/cancel-scheduled/{pub.id}",
+                        headers={"x-internal-api-key": settings.INTERNAL_API_KEY},
+                    )
+                    resp.raise_for_status()
+            except Exception as exc:
+                logger.warning(
+                    "cancel_scheduled: Zernio cancel failed (continuing)",
+                    error=str(exc),
+                )
 
         pub.status = PublishStatus.CANCELLED
         await db.commit()
@@ -332,3 +368,30 @@ async def _validate_post_for_publish(post_id: str, user_id: uuid.UUID) -> None:
         )
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Post is already published")
+
+
+async def _create_published_post_row(
+    content_post_id: str,
+    user_id: uuid.UUID,
+    mode: PublishMode,
+    privacy_level: str,
+) -> str:
+    """Insert a PROCESSING PublishedPost row and return its UUID as a string.
+
+    Doing this synchronously (before queuing the background task) lets the API
+    response carry the real id so the frontend can subscribe to the WebSocket
+    room `publish:<id>` and poll `GET /publish/{id}/status` immediately.
+    """
+    async with async_session_factory() as db:
+        pub = PublishedPost(
+            content_post_id=uuid.UUID(content_post_id),
+            published_by=user_id,
+            publish_mode=mode,
+            status=PublishStatus.PROCESSING,
+            privacy_level=privacy_level,
+        )
+        db.add(pub)
+        await db.flush()
+        published_post_id = str(pub.id)
+        await db.commit()
+    return published_post_id

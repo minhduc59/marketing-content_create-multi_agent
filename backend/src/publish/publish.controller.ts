@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -92,11 +93,12 @@ export class PublishController {
       example: { caption: 'Override caption', hashtags: ['#ai', '#dev'] },
     },
   })
-  publishNow(
+  async publishNow(
     @CurrentUser() user: CurrentUserPayload,
     @Param('postId') postId: string,
     @Body() body: Record<string, unknown>,
   ) {
+    await this.assertTiktokLinked(user.userId);
     return this.ai.publishNow(user.userId, postId, body);
   }
 
@@ -113,11 +115,12 @@ export class PublishController {
       example: { scheduledAt: '2026-04-12T14:00:00Z' },
     },
   })
-  schedule(
+  async schedule(
     @CurrentUser() user: CurrentUserPayload,
     @Param('postId') postId: string,
     @Body() body: Record<string, unknown>,
   ) {
+    await this.assertTiktokLinked(user.userId);
     return this.ai.schedulePublish(user.userId, postId, body);
   }
 
@@ -131,11 +134,12 @@ export class PublishController {
   @ApiBody({
     schema: { type: 'object', additionalProperties: true, example: {} },
   })
-  auto(
+  async auto(
     @CurrentUser() user: CurrentUserPayload,
     @Param('postId') postId: string,
     @Body() body: Record<string, unknown>,
   ) {
+    await this.assertTiktokLinked(user.userId);
     return this.ai.autoPublish(user.userId, postId, body);
   }
 
@@ -164,5 +168,17 @@ export class PublishController {
     @Param('publishedPostId') id: string,
   ) {
     return this.ai.getPublishStatus(user.userId, id);
+  }
+
+  private async assertTiktokLinked(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { tiktokLinked: true, zernioTiktokAccountId: true },
+    });
+    if (!user?.tiktokLinked || !user.zernioTiktokAccountId) {
+      throw new BadRequestException(
+        'TikTok account not connected. Please connect your TikTok account in Settings → Accounts first.',
+      );
+    }
   }
 }

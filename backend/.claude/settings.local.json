@@ -1,4 +1,27 @@
 {
+  "permissions": {
+    "allow": [
+      "Read(//Users/Duc/Documents/Đồ Án Tốt Nghiệp/Project/marketing-content/frontend/**)",
+      "Bash(npx tsc *)",
+      "Bash(python3 -c ' *)",
+      "Bash(npx prisma *)",
+      "Bash(npx jest *)",
+      "Bash(npx --prefix \"/Users/Duc/Documents/Đồ Án Tốt Nghiệp/Project/marketing-content/frontend\" tsc --noEmit -p \"/Users/Duc/Documents/Đồ Án Tốt Nghiệp/Project/marketing-content/frontend/tsconfig.json\")",
+      "Bash(npm run *)",
+      "WebFetch(domain:zernio.com)",
+      "WebFetch(domain:docs.zernio.com)",
+      "Read(//Users/Duc/Documents/Đồ Án Tốt Nghiệp/Project/marketing-content/ai-service/**)",
+      "Bash(python -c ' *)",
+      "Bash(docker compose *)",
+      "WebSearch",
+      "mcp__ayrshare__search_ayrshare_api_documentation",
+      "WebFetch(domain:texttooldb.com)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "code-review-graph"
+  ],
   "disabledMcpjsonServers": [
     "hackernews"
   ]

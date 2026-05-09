@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\(py|ts\\)$\")",
+      "Bash(npm run *)"
+    ]
+  },
   "enabledMcpjsonServers": [
     "code-review-graph",
     "hackernews"

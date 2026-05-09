@@ -1,6 +1,8 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -8,6 +10,10 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  TIKTOK_PUBLISHER,
+  TikTokPublisher,
+} from '../publisher/tiktok-publisher.interface';
 import { CurrentUserPayload } from './decorators/current-user.decorator';
 import { RegisterDto } from './dto/auth.dto';
 
@@ -27,10 +33,14 @@ const BCRYPT_ROUNDS = 12;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    @Inject(TIKTOK_PUBLISHER)
+    private readonly publisher: TikTokPublisher,
   ) {}
 
   // -------------------------------------------------------------------
@@ -54,6 +64,16 @@ export class AuthService {
         },
       },
     });
+
+    // Create publisher profile asynchronously — don't block registration on failure
+    this.publisher
+      .ensureProfile(user.id, user.email, user.displayName)
+      .catch((err) =>
+        this.logger.error(
+          `publisher: profile creation failed for ${user.id}: ${(err as Error).message}`,
+        ),
+      );
+
     return this.issueTokens({
       userId: user.id,
       email: user.email,

@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     S3_REGION: str = "ap-southeast-1"
     S3_PREFIX: str = "trending-scanner"
 
+    # Cloudinary (temporary image hosting; replaces local disk for generated post images)
+    CLOUDINARY_CLOUD_NAME: str | None = None
+    CLOUDINARY_API_KEY: str | None = None
+    CLOUDINARY_API_SECRET: str | None = None
+
     # TikTok API
     TIKTOK_CLIENT_KEY: str = ""
     TIKTOK_CLIENT_SECRET: str = ""

@@ -1,209 +1,185 @@
-"""LangGraph node: execute TikTok publishing with retry logic."""
+"""LangGraph node: publish post via NestJS backend → Zernio → TikTok."""
 
 from __future__ import annotations
 
-import asyncio
 import uuid
-from datetime import datetime, timezone
 
+import httpx
 import structlog
 from sqlalchemy import select
 
 from app.agents.publish_post.constants import RETRY_DELAYS_SECONDS
 from app.agents.publish_post.state import PublishPostState
-from app.agents.publish_post.token_manager import get_valid_token
-from app.clients.tiktok_client import TikTokClient, get_tiktok_client
 from app.config import get_settings
-from app.core.exceptions import ApiError
-from app.db.models.content_post import ContentPost
-from app.db.models.enums import ContentStatus, PublishStatus
+from app.core.cloudinary_uploader import assert_cloudinary_url
+from app.db.models.enums import PublishStatus
 from app.db.models.published_post import PublishedPost
 from app.db.session import async_session_factory
 
 logger = structlog.get_logger()
 
 
-async def _execute_publish(
-    tiktok: TikTokClient,
-    access_token: str,
+async def _call_backend_publish(
+    published_post_id: str,
+    user_id: str,
     image_url: str,
     caption: str,
-    title: str,
-    privacy_level: str,
-) -> tuple[str, str, str | None]:
-    """Execute the TikTok publish flow: creator info → init post → poll status.
+    tags: list[str],
+    scheduled_at: str | None,
+) -> dict:
+    """POST to NestJS backend /v1/publisher/internal/publish.
 
-    Returns (publish_id, status, platform_post_id | None).
+    Returns the JSON response: { postId, status, publishedUrl, publishedPostId }
+    Raises httpx.HTTPStatusError on non-2xx responses.
     """
-    # Step 1: Query creator info
-    creator_info = await tiktok.query_creator_info(access_token)
+    settings = get_settings()
+    backend_url = settings.BACKEND_ORIGIN.rstrip("/")
+    url = f"{backend_url}/v1/publisher/internal/publish"
 
-    # Validate privacy level is allowed
-    if privacy_level not in creator_info.privacy_level_options:
-        available = creator_info.privacy_level_options
-        logger.warning(
-            "publish: requested privacy not available, falling back",
-            requested=privacy_level,
-            available=available,
+    payload: dict = {
+        "publishedPostId": published_post_id,
+        "userId": user_id,
+        "imageUrl": image_url,
+        "caption": caption,
+        "tags": tags,
+    }
+    if scheduled_at:
+        payload["scheduledAt"] = scheduled_at
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            url,
+            json=payload,
+            headers={
+                "x-internal-api-key": settings.INTERNAL_API_KEY,
+                "Content-Type": "application/json",
+            },
         )
-        privacy_level = available[0] if available else "SELF_ONLY"
-
-    # Step 2: Initialize photo post
-    publish_id = await tiktok.init_photo_post(
-        access_token=access_token,
-        photo_urls=[image_url],
-        title=title,
-        description=caption,
-        privacy_level=privacy_level,
-    )
-
-    # Step 3: Poll publish status
-    result = await tiktok.poll_publish_status(access_token, publish_id)
-
-    return result.publish_id, result.status, result.platform_post_id
+        response.raise_for_status()
+        return response.json()
 
 
 async def publish_node(state: PublishPostState) -> dict:
-    """Execute TikTok publishing with retry logic.
+    """Call NestJS backend to publish the post via Zernio.
 
-    Retries up to PUBLISH_MAX_RETRIES times with exponential backoff
-    for retryable errors. Non-retryable errors fail immediately.
+    Retries up to PUBLISH_MAX_RETRIES times with exponential backoff.
+    NestJS handles the actual Zernio API call and TikTok publishing.
     """
     settings = get_settings()
-    tiktok = get_tiktok_client()
     published_post_id = state["published_post_id"]
     content_post_id = state["content_post_id"]
+    user_id = state.get("user_id", "")
 
-    async with async_session_factory() as db:
-        # Get fresh token (may refresh if expired)
-        try:
-            access_token, open_id = await get_valid_token(db)
-        except ApiError as e:
-            logger.error("publish: token error", error=str(e))
-            return {
-                "publish_status": "failed",
-                "error": str(e),
-            }
-        await db.commit()
-
-    # Build title from caption (first line, truncated)
     caption = state["assembled_caption"]
-    title = caption.split("\n")[0][:150]
+    image_url = state["image_public_url"]
+    scheduled_at = state.get("scheduled_at") or None
+
+    # Final guard before the Zernio call — refuses anything that isn't a
+    # public Cloudinary https URL so we never hand a local path to Zernio.
+    assert_cloudinary_url(image_url)
 
     last_error = ""
-    final_publish_id = ""
-    final_platform_post_id = ""
+    provider_post_id = ""
 
     for attempt in range(settings.PUBLISH_MAX_RETRIES + 1):
         try:
             logger.info(
-                "publish: attempting",
+                "publish_node: calling backend",
                 published_post_id=published_post_id,
                 attempt=attempt + 1,
+                scheduled_at=scheduled_at,
             )
 
-            publish_id, status, platform_post_id = await _execute_publish(
-                tiktok=tiktok,
-                access_token=access_token,
-                image_url=state["image_public_url"],
+            result = await _call_backend_publish(
+                published_post_id=published_post_id,
+                user_id=user_id,
+                image_url=image_url,
                 caption=caption,
-                title=title,
-                privacy_level=state["privacy_level"],
+                tags=[],
+                scheduled_at=scheduled_at,
             )
 
-            final_publish_id = publish_id
+            provider_post_id = result.get("postId", "")
+            backend_status = result.get("status", "")
 
-            if status == "PUBLISH_COMPLETE":
-                final_platform_post_id = platform_post_id or ""
-
-                # Update DB: published_post + content_post
-                async with async_session_factory() as db:
-                    pub = (await db.execute(
-                        select(PublishedPost).where(PublishedPost.id == uuid.UUID(published_post_id))
-                    )).scalar_one_or_none()
-                    if pub:
-                        pub.status = PublishStatus.PUBLISHED
-                        pub.tiktok_publish_id = publish_id
-                        pub.platform_post_id = final_platform_post_id
-                        pub.published_at = datetime.now(timezone.utc)
-                        pub.retry_count = attempt
-
-                    content = (await db.execute(
-                        select(ContentPost).where(ContentPost.id == uuid.UUID(content_post_id))
-                    )).scalar_one_or_none()
-                    if content:
-                        content.status = ContentStatus.PUBLISHED
-
+            # Persist the provider post ID so the webhook handler can match it
+            async with async_session_factory() as db:
+                pub = (
+                    await db.execute(
+                        select(PublishedPost).where(
+                            PublishedPost.id == uuid.UUID(published_post_id)
+                        )
+                    )
+                ).scalar_one_or_none()
+                if pub:
+                    pub.tiktok_publish_id = provider_post_id
+                    # Status stays PROCESSING until publisher webhook confirms
+                    pub.retry_count = attempt
                     await db.commit()
 
-                logger.info(
-                    "publish: success",
-                    published_post_id=published_post_id,
-                    platform_post_id=final_platform_post_id,
-                )
+            logger.info(
+                "publish_node: backend accepted",
+                provider_post_id=provider_post_id,
+                backend_status=backend_status,
+            )
 
-                return {
-                    "publish_status": "published",
-                    "tiktok_publish_id": publish_id,
-                    "platform_post_id": final_platform_post_id,
-                    "error": "",
-                }
+            return {
+                "publish_status": "scheduled" if scheduled_at else "processing",
+                "provider_post_id": provider_post_id,
+                "error": "",
+            }
 
-            # FAILED status from polling
-            last_error = f"TikTok publish failed: {platform_post_id or 'unknown reason'}"
-
-            # Check if the failure reason from the poll result is non-retryable
-            # The fail_reason is stored in platform_post_id field of PublishResult when status is FAILED
-            # Actually let's check the tiktok client's result properly
-            poll_result = await tiktok.poll_publish_status(access_token, publish_id)
-            if not tiktok.is_retryable_error(poll_result.fail_reason):
-                last_error = f"Non-retryable TikTok error: {poll_result.fail_reason}"
-                logger.error("publish: non-retryable failure", error=last_error)
-                break
-
-        except ApiError as e:
-            last_error = str(e)
+        except httpx.HTTPStatusError as e:
+            last_error = f"Backend HTTP {e.response.status_code}: {e.response.text[:200]}"
             logger.warning(
-                "publish: API error",
+                "publish_node: backend error",
                 attempt=attempt + 1,
+                status=e.response.status_code,
                 error=last_error,
             )
+            # Don't retry on 4xx (bad request, not linked, etc.)
+            if 400 <= e.response.status_code < 500:
+                break
 
         except Exception as e:
             last_error = str(e)
             logger.error(
-                "publish: unexpected error",
+                "publish_node: unexpected error",
                 attempt=attempt + 1,
                 error=last_error,
             )
 
-        # Wait before retry (if not last attempt)
         if attempt < settings.PUBLISH_MAX_RETRIES:
+            import asyncio
             delay = RETRY_DELAYS_SECONDS[min(attempt, len(RETRY_DELAYS_SECONDS) - 1)]
-            logger.info("publish: retrying after delay", delay_seconds=delay)
+            logger.info("publish_node: retrying after delay", delay_seconds=delay)
             await asyncio.sleep(delay)
 
-    # All retries exhausted — mark as failed
+    # All retries exhausted — mark as failed in DB
     async with async_session_factory() as db:
-        pub = (await db.execute(
-            select(PublishedPost).where(PublishedPost.id == uuid.UUID(published_post_id))
-        )).scalar_one_or_none()
+        pub = (
+            await db.execute(
+                select(PublishedPost).where(
+                    PublishedPost.id == uuid.UUID(published_post_id)
+                )
+            )
+        ).scalar_one_or_none()
         if pub:
             pub.status = PublishStatus.FAILED
             pub.error_message = last_error
             pub.retry_count = settings.PUBLISH_MAX_RETRIES
-            if final_publish_id:
-                pub.tiktok_publish_id = final_publish_id
-            await db.commit()
+
+        # Leave ContentPost as APPROVED so the user can retry publish
+        await db.commit()
 
     logger.error(
-        "publish: all retries exhausted",
+        "publish_node: all retries exhausted",
         published_post_id=published_post_id,
         error=last_error,
     )
 
     return {
         "publish_status": "failed",
-        "tiktok_publish_id": final_publish_id,
+        "provider_post_id": provider_post_id,
         "error": last_error,
     }

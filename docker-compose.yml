@@ -45,7 +45,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://ai_svc:ai_svc_pass@postgres:5432/trending_scanner
       REDIS_URL: redis://redis:6379/0
-      BACKEND_ORIGIN: http://backend:3000
+      BACKEND_ORIGIN: http://host.docker.internal:3000
       REQUIRE_INTERNAL_AUTH: "true"
       INTERNAL_API_KEY: ${AI_SERVICE_INTERNAL_API_KEY:-change-me-internal}
     depends_on:

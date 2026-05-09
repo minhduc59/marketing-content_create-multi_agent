@@ -1,16 +1,18 @@
 """LangGraph graph definition for the Publish Post Agent.
 
 Graph flow:
-    START → resolve_and_validate → golden_hour → route_schedule
-      ├─ "publish_now"  → publish → END
-      └─ "schedule"     → schedule_job → END
+    START → resolve_and_validate → golden_hour → scheduler → publish_node → END
+
+The publisher (Zernio, via NestJS backend) handles scheduled delivery — when
+`scheduled_at` is set, publish_node forwards `scheduledFor` and the publisher
+publishes at the chosen time.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 
+import httpx
 import structlog
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
@@ -20,9 +22,8 @@ from app.agents.publish_post.golden_hour import golden_hour_node
 from app.agents.publish_post.publish_node import publish_node
 from app.agents.publish_post.scheduler_node import scheduler_node
 from app.agents.publish_post.state import PublishPostState
-from app.agents.publish_post.token_manager import get_valid_token
-from app.core.exceptions import ApiError
-from app.core.storage import get_storage
+from app.config import get_settings
+from app.core.cloudinary_uploader import assert_cloudinary_url
 from app.db.models.content_post import ContentPost
 from app.db.models.enums import ContentStatus, PublishMode, PublishStatus
 from app.db.models.published_post import PublishedPost
@@ -35,16 +36,20 @@ async def resolve_and_validate_node(state: PublishPostState) -> dict:
     """Resolve all data needed for publishing:
 
     1. Load ContentPost from DB, validate status = approved
-    2. Create PublishedPost record
-    3. Resolve image public URL via StorageBackend
-    4. Assemble caption (caption + hashtags + CTA)
-    5. Validate TikTok token exists
+    2. Check for duplicate published record
+    3. Create PublishedPost record (status = PROCESSING)
+    4. Resolve image public URL via StorageBackend
+    5. Assemble caption (caption + hashtags + CTA)
+
+    NOTE: TikTok account / publisher validation is handled by the NestJS
+    backend in the internal publish endpoint. We no longer need to check
+    OAuth tokens here.
     """
     content_post_id = state["content_post_id"]
     publish_mode = state.get("publish_mode", "auto")
+    preexisting_id = state.get("published_post_id") or ""
 
     async with async_session_factory() as db:
-        # Load content post
         result = await db.execute(
             select(ContentPost).where(ContentPost.id == uuid.UUID(content_post_id))
         )
@@ -59,29 +64,79 @@ async def resolve_and_validate_node(state: PublishPostState) -> dict:
                 "only 'approved' posts can be published"
             )
 
-        # Check for duplicate: already successfully published
-        existing = await db.execute(
+        # Guard against re-publishing an already-published post
+        existing_published = await db.execute(
             select(PublishedPost).where(
                 PublishedPost.content_post_id == post.id,
                 PublishedPost.status == PublishStatus.PUBLISHED,
             )
         )
-        if existing.scalar_one_or_none():
+        if existing_published.scalar_one_or_none():
             raise ValueError(f"ContentPost {content_post_id} is already published")
 
-        # Create published_post record
+        # Cancel any existing PENDING/PROCESSING records so a fresh publish can proceed.
+        # This covers "Publish Now" on a post that was already scheduled.
+        # Exclude the row we're about to use (when the API pre-created it).
+        active_query = select(PublishedPost).where(
+            PublishedPost.content_post_id == post.id,
+            PublishedPost.status.in_(
+                [PublishStatus.PENDING, PublishStatus.PROCESSING]
+            ),
+        )
+        if preexisting_id:
+            active_query = active_query.where(
+                PublishedPost.id != uuid.UUID(preexisting_id)
+            )
+        active_records = (await db.execute(active_query)).scalars().all()
+
+        if active_records:
+            settings = get_settings()
+            backend_url = settings.BACKEND_ORIGIN.rstrip("/")
+            for old_pub in active_records:
+                if old_pub.tiktok_publish_id:
+                    try:
+                        async with httpx.AsyncClient(timeout=10) as client:
+                            await client.delete(
+                                f"{backend_url}/v1/publisher/internal/cancel-scheduled/{old_pub.id}",
+                                headers={"x-internal-api-key": settings.INTERNAL_API_KEY},
+                            )
+                    except Exception as exc:
+                        logger.warning(
+                            "resolve: could not cancel Zernio scheduled post",
+                            published_post_id=str(old_pub.id),
+                            error=str(exc),
+                        )
+                old_pub.status = PublishStatus.CANCELLED
+
+        # Reuse pre-existing tracking record (created by the API handler) or create one.
         import uuid as _uuid
 
         _user_id_raw = state.get("user_id") or ""
-        pub = PublishedPost(
-            content_post_id=post.id,
-            published_by=_uuid.UUID(_user_id_raw) if _user_id_raw else None,
-            publish_mode=PublishMode(publish_mode),
-            status=PublishStatus.PROCESSING,
-            privacy_level=state.get("privacy_level", "SELF_ONLY"),
-        )
-        db.add(pub)
-        await db.flush()
+        if preexisting_id:
+            pub = (
+                await db.execute(
+                    select(PublishedPost).where(
+                        PublishedPost.id == _uuid.UUID(preexisting_id)
+                    )
+                )
+            ).scalar_one_or_none()
+            if pub is None:
+                raise ValueError(
+                    f"PublishedPost {preexisting_id} not found"
+                )
+            pub.publish_mode = PublishMode(publish_mode)
+            pub.status = PublishStatus.PROCESSING
+            pub.privacy_level = state.get("privacy_level", pub.privacy_level)
+        else:
+            pub = PublishedPost(
+                content_post_id=post.id,
+                published_by=_uuid.UUID(_user_id_raw) if _user_id_raw else None,
+                publish_mode=PublishMode(publish_mode),
+                status=PublishStatus.PROCESSING,
+                privacy_level=state.get("privacy_level", "PUBLIC_TO_EVERYONE"),
+            )
+            db.add(pub)
+            await db.flush()
         published_post_id = str(pub.id)
 
         # Assemble caption
@@ -93,24 +148,11 @@ async def resolve_and_validate_node(state: PublishPostState) -> dict:
         )
         pub.assembled_caption = caption
 
-        # Resolve image public URL
-        storage = get_storage()
-        image_key = post.image_path or ""
-        if not image_key or not storage.exists(image_key):
-            raise ValueError(
-                f"Thumbnail not found at '{image_key}'. "
-                "Ensure the image was generated by the Visual Factory."
-            )
-        image_public_url = storage.get_public_url(image_key)
-
-        # Validate token exists (don't decrypt yet — just check)
-        try:
-            access_token, open_id = await get_valid_token(db)
-        except ApiError as e:
-            pub.status = PublishStatus.FAILED
-            pub.error_message = str(e)
-            await db.commit()
-            raise
+        # The image_path column now stores a public Cloudinary https URL
+        # written by image_generation_node. Reject anything else (legacy
+        # local-path rows from before this migration must be regenerated).
+        image_public_url = post.image_path or ""
+        assert_cloudinary_url(image_public_url)
 
         await db.commit()
 
@@ -125,17 +167,12 @@ async def resolve_and_validate_node(state: PublishPostState) -> dict:
         "published_post_id": published_post_id,
         "assembled_caption": caption,
         "image_public_url": image_public_url,
-        "access_token": access_token,
-        "tiktok_open_id": open_id,
     }
 
 
 def _route_after_schedule(state: PublishPostState) -> str:
-    """Conditional edge: publish now or schedule for later."""
-    status = state.get("publish_status", "")
-    if status == "publish_now":
-        return "publish"
-    return END  # "scheduled" — APScheduler will trigger publish later
+    """Conditional edge: always run publish_node; it forwards scheduledAt if set."""
+    return "publish"
 
 
 def build_publish_graph() -> StateGraph:
@@ -150,15 +187,7 @@ def build_publish_graph() -> StateGraph:
     graph.add_edge(START, "resolve_and_validate")
     graph.add_edge("resolve_and_validate", "golden_hour")
     graph.add_edge("golden_hour", "scheduler")
-
-    graph.add_conditional_edges(
-        "scheduler",
-        _route_after_schedule,
-        {
-            "publish": "publish",
-            END: END,
-        },
-    )
+    graph.add_edge("scheduler", "publish")
     graph.add_edge("publish", END)
 
     return graph.compile()

@@ -1,4 +1,10 @@
-"""LangGraph node: schedule a publish job or proceed to immediate publish."""
+"""LangGraph node: determine publish schedule and pass to publish_node.
+
+Scheduling is handled by the publisher (Zernio) via the `scheduledFor`
+parameter on POST /api/v1/posts — no local APScheduler jobs are needed.
+This node simply determines the target time and puts it in state for
+publish_node to forward.
+"""
 
 from __future__ import annotations
 
@@ -14,18 +20,16 @@ from app.db.session import async_session_factory
 
 logger = structlog.get_logger()
 
-# If the scheduled time is within this window, publish immediately
+# If the scheduled time is within this window, treat as immediate (no scheduleDate)
 IMMEDIATE_THRESHOLD = timedelta(minutes=2)
 
 
 async def scheduler_node(state: PublishPostState) -> dict:
-    """Decide whether to publish now or schedule for later.
+    """Determine publish time and persist to the PublishedPost record.
 
-    If `scheduled_time_override` is provided, use that time.
-    Otherwise, use the golden hour result.
-
-    If the target time is within 2 minutes, proceed to immediate publish.
-    Otherwise, create an APScheduler delayed job.
+    Returns `scheduled_at` (ISO UTC string) for future posts, or "" for
+    immediate publish. The publish_node passes this as `scheduledAt` to
+    the NestJS backend which forwards `scheduledFor` to Zernio.
     """
     now = datetime.now(timezone.utc)
     published_post_id = state["published_post_id"]
@@ -35,6 +39,10 @@ async def scheduler_node(state: PublishPostState) -> dict:
         target_time = datetime.fromisoformat(state["scheduled_time_override"])
         if target_time.tzinfo is None:
             target_time = target_time.replace(tzinfo=timezone.utc)
+        golden_hour_slot = "manual"
+    elif state.get("publish_mode") == "manual":
+        # "Publish Now": manual mode with no scheduled_time_override -> publish immediately
+        target_time = now
         golden_hour_slot = "manual"
     else:
         gh = state.get("golden_hour_result", {})
@@ -48,52 +56,39 @@ async def scheduler_node(state: PublishPostState) -> dict:
         golden_hour_slot = gh.get("selected_slot", {}).get("slot_time", "")
 
     time_until = target_time - now
+    is_immediate = time_until <= IMMEDIATE_THRESHOLD
 
-    # Publish immediately if within threshold
-    if time_until <= IMMEDIATE_THRESHOLD:
+    if is_immediate:
         logger.info(
-            "scheduler: publishing immediately",
+            "scheduler: publish immediately",
             published_post_id=published_post_id,
-            time_until_seconds=time_until.total_seconds(),
         )
-        return {"publish_status": "publish_now"}
+        scheduled_at_iso = ""
+        new_status = PublishStatus.PROCESSING
+    else:
+        # Pass scheduledFor to Zernio — it will deliver at that time
+        scheduled_at_iso = target_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        new_status = PublishStatus.PENDING
+        logger.info(
+            "scheduler: scheduled via publisher",
+            published_post_id=published_post_id,
+            scheduled_at=scheduled_at_iso,
+            golden_hour_slot=golden_hour_slot,
+        )
 
-    # Schedule for later via APScheduler
-    logger.info(
-        "scheduler: scheduling for later",
-        published_post_id=published_post_id,
-        target_time=str(target_time),
-        golden_hour_slot=golden_hour_slot,
-    )
-
-    # Import here to avoid circular imports with FastAPI app
-    from app.agents.publish_post.runner import run_publish_pipeline_job
-
-    from app.main import app
-    scheduler = app.state.scheduler
-
-    job = scheduler.add_job(
-        run_publish_pipeline_job,
-        "date",
-        run_date=target_time,
-        args=[state["content_post_id"]],
-        id=f"publish_{published_post_id}",
-        replace_existing=True,
-    )
-
-    # Update DB record with scheduling info
+    # Persist schedule metadata to the DB record
     async with async_session_factory() as db:
         result = await db.execute(
-            select(PublishedPost).where(
-                PublishedPost.id == published_post_id
-            )
+            select(PublishedPost).where(PublishedPost.id == published_post_id)
         )
-        pub_post = result.scalar_one_or_none()
-        if pub_post:
-            pub_post.scheduled_at = target_time
-            pub_post.golden_hour_slot = golden_hour_slot
-            pub_post.scheduler_job_id = job.id
-            pub_post.status = PublishStatus.PENDING
+        pub = result.scalar_one_or_none()
+        if pub:
+            pub.scheduled_at = target_time if not is_immediate else None
+            pub.golden_hour_slot = golden_hour_slot
+            pub.status = new_status
             await db.commit()
 
-    return {"publish_status": "scheduled"}
+    return {
+        "publish_status": "immediate" if is_immediate else "scheduled",
+        "scheduled_at": scheduled_at_iso,
+    }

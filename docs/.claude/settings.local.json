@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__ayrshare__query_docs_filesystem_ayrshare_api_documentation",
+      "Bash(npx tsc *)",
+      "Bash(npx prisma *)",
+      "Bash(npx jest *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('jest', {}\\), indent=2\\)\\)\")",
+      "Bash(npm install *)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "code-review-graph",
+    "hackernews"
+  ]
+}

@@ -1,12 +1,51 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getGoogleLoginUrl, getTiktokLoginUrl } from "@/lib/api/auth";
+import { fetchTiktokConnectUrl, getGoogleLoginUrl, getMe } from "@/lib/api/auth";
+import type { User } from "@/lib/api/types";
 
 export default function AccountsPage() {
+  const [tiktokLoading, setTiktokLoading] = useState(false);
+  const [tiktokError, setTiktokError] = useState<string | null>(null);
+  const [tiktokSuccess, setTiktokSuccess] = useState<string | null>(null);
+  const [me, setMe] = useState<User | null>(null);
+
+  useEffect(() => {
+    // Handle redirect back from Zernio OAuth callback
+    const params = new URLSearchParams(window.location.search);
+    const tiktok = params.get("tiktok");
+    if (tiktok === "connected") {
+      setTiktokSuccess("TikTok account connected successfully!");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (tiktok === "error") {
+      setTiktokError("Failed to connect TikTok account. Please try again.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    getMe().then(setMe).catch(() => {});
+  }, []);
+
+  async function handleConnectTiktok() {
+    setTiktokError(null);
+    setTiktokSuccess(null);
+    setTiktokLoading(true);
+    try {
+      const url = await fetchTiktokConnectUrl();
+      window.location.href = url;
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to start TikTok connect";
+      setTiktokError(msg);
+      setTiktokLoading(false);
+    }
+  }
+
+  const isLinked = me?.tiktokLinked ?? false;
+
   return (
     <div className="max-w-2xl space-y-4">
       {/* Google Account */}
@@ -58,20 +97,46 @@ export default function AccountsPage() {
               <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V9.01a8.35 8.35 0 004.76 1.49V7.05a4.96 4.96 0 01-1-.36z" />
             </svg>
             TikTok
+            {isLinked && (
+              <span className="ml-auto flex items-center gap-1 text-xs font-normal text-green-600">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Connected
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="mb-3 text-sm text-muted-foreground">
-            Connect your TikTok creator account to enable auto-publishing.
+            {isLinked
+              ? "Your TikTok creator account is connected. Posts will be published to this account."
+              : "Connect your TikTok creator account to enable auto-publishing."}
           </p>
+
+          {tiktokSuccess && (
+            <div className="mb-3 flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              {tiktokSuccess}
+            </div>
+          )}
+
+          {tiktokError && (
+            <div className="mb-3 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <XCircle className="h-4 w-4 shrink-0" />
+              {tiktokError}
+            </div>
+          )}
+
           <Button
-            variant="outline"
-            onClick={() => {
-              window.location.href = getTiktokLoginUrl();
-            }}
+            variant={isLinked ? "secondary" : "outline"}
+            onClick={handleConnectTiktok}
+            disabled={tiktokLoading}
           >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Connect TikTok
+            {tiktokLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <ExternalLink className="mr-2 h-4 w-4" />
+            )}
+            {isLinked ? "Reconnect TikTok" : "Connect TikTok"}
           </Button>
         </CardContent>
       </Card>

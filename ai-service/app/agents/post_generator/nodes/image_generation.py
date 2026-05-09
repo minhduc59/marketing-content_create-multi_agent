@@ -6,7 +6,7 @@ import structlog
 
 from app.agents.post_generator.state import PostGenState
 from app.clients.bfl_client import get_image_client
-from app.core.storage import get_storage
+from app.core.cloudinary_uploader import upload_image_bytes
 
 logger = structlog.get_logger()
 
@@ -43,18 +43,15 @@ async def _generate_single_image(
             size=size,
         )
 
-        ext = "png" if "png" in result.content_type else "jpg"
-        storage_key = f"posts/{scan_run_id}/images/{post_id}.{ext}"
-
-        storage = get_storage()
-        saved_path = storage.write_bytes(
-            storage_key,
+        public_id = f"posts/{scan_run_id}/{post_id}"
+        secure_url = await upload_image_bytes(
             result.image_bytes,
+            public_id=public_id,
             content_type=result.content_type,
         )
 
-        post_copy["image_path"] = saved_path
-        logger.info("image_generation: saved", post_id=post_id, path=saved_path)
+        post_copy["image_path"] = secure_url
+        logger.info("image_generation: uploaded", post_id=post_id, url=secure_url)
         return post_copy, None
 
     except Exception as e:
