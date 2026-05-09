@@ -17,6 +17,10 @@ export function getSocket(token: string): Socket {
   return socket;
 }
 
+export function getSocketInstance(): Socket | null {
+  return socket;
+}
+
 export function disconnectSocket() {
   socket?.disconnect();
   socket = null;

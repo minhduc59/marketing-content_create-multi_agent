@@ -7,5 +7,6 @@ import { StatusGateway } from './status.gateway';
 @Module({
   imports: [ConfigModule, JwtModule.register({}), AiServiceModule],
   providers: [StatusGateway],
+  exports: [StatusGateway],
 })
 export class StatusModule {}

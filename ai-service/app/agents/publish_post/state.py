@@ -6,26 +6,23 @@ from typing import TypedDict
 class PublishPostState(TypedDict):
     # Input
     content_post_id: str
-    user_id: str                     # UUID of triggering user, "" if system/job
-    publish_mode: str               # "auto" | "manual"
-    scheduled_time_override: str     # ISO timestamp or "" for auto
-    privacy_level: str
+    user_id: str            # UUID of triggering user, "" if system/job
+    publish_mode: str       # "auto" | "manual"
+    scheduled_time_override: str   # ISO timestamp or "" for auto
+    privacy_level: str      # TikTok privacy level passed through to publisher
 
     # Resolved during execution
-    published_post_id: str          # DB record ID created at start
-    access_token: str
-    tiktok_open_id: str
+    published_post_id: str  # DB record ID created at resolve_and_validate
     image_public_url: str
     assembled_caption: str
 
-    # Golden hour
-    golden_hour_result: dict        # GoldenHourResult as dict
+    # Scheduling
+    golden_hour_result: dict   # GoldenHourResult as dict
+    scheduled_at: str          # ISO UTC datetime chosen by scheduler, or "" for immediate
 
-    # TikTok API results
-    creator_info: dict
-    tiktok_publish_id: str          # from /content/init
-    platform_post_id: str           # from poll status (after moderation)
+    # Publish results (set by publish_node)
+    provider_post_id: str      # Publisher (Zernio) post ID returned by backend
 
     # Final
-    publish_status: str             # "published" | "failed" | "scheduled"
+    publish_status: str        # "processing" | "scheduled" | "failed"
     error: str

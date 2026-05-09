@@ -82,6 +82,7 @@ export interface User {
   displayName: string | null;
   avatarUrl: string | null;
   role: "admin" | "user";
+  tiktokLinked: boolean;
   createdAt: string;
 }
 

@@ -19,6 +19,7 @@ async def run_publish_pipeline(
     scheduled_time: datetime | None = None,
     privacy_level: str | None = None,
     user_id: str | None = None,
+    published_post_id: str = "",
 ) -> dict:
     """Run the Publish Post Agent pipeline.
 
@@ -29,6 +30,9 @@ async def run_publish_pipeline(
             If None in manual mode, publishes immediately.
         privacy_level: TikTok privacy level. Defaults to config value.
         user_id: UUID of the triggering user. Propagated into PublishedPost.published_by.
+        published_post_id: Optional pre-created PublishedPost row id. When provided,
+            resolve_and_validate_node loads that row instead of creating a new one
+            so the API can return the real id synchronously.
 
     Returns:
         Dict with publish_status, published_post_id, and error info if any.
@@ -41,15 +45,12 @@ async def run_publish_pipeline(
         publish_mode=mode,
         scheduled_time_override=scheduled_time.isoformat() if scheduled_time else "",
         privacy_level=privacy_level or settings.TIKTOK_DEFAULT_PRIVACY,
-        published_post_id="",
-        access_token="",
-        tiktok_open_id="",
+        published_post_id=published_post_id,
         image_public_url="",
         assembled_caption="",
         golden_hour_result={},
-        creator_info={},
-        tiktok_publish_id="",
-        platform_post_id="",
+        scheduled_at="",
+        provider_post_id="",
         publish_status="",
         error="",
     )
@@ -75,7 +76,7 @@ async def run_publish_pipeline(
         "content_post_id": content_post_id,
         "published_post_id": result.get("published_post_id", ""),
         "publish_status": result.get("publish_status", ""),
-        "tiktok_publish_id": result.get("tiktok_publish_id", ""),
+        "provider_post_id": result.get("provider_post_id", ""),
         "platform_post_id": result.get("platform_post_id", ""),
         "error": result.get("error", ""),
     }

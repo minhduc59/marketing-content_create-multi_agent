@@ -13,6 +13,7 @@ import { PublishModule } from './publish/publish.module';
 import { ReportsModule } from './reports/reports.module';
 import { TiktokAuthModule } from './tiktok-auth/tiktok-auth.module';
 import { StatusModule } from './status/status.module';
+import { PublisherModule } from './publisher/publisher.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { HealthController } from './common/health.controller';
 
@@ -31,6 +32,7 @@ import { HealthController } from './common/health.controller';
     ReportsModule,
     TiktokAuthModule,
     StatusModule,
+    PublisherModule,
   ],
   controllers: [HealthController],
   providers: [

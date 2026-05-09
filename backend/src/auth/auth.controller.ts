@@ -120,6 +120,7 @@ export class AuthController {
         displayName: true,
         avatarUrl: true,
         role: true,
+        tiktokLinked: true,
         createdAt: true,
       },
     });

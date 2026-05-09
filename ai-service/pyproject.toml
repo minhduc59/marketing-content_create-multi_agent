@@ -38,6 +38,9 @@ dependencies = [
     # Cloud storage (S3 for production)
     "boto3>=1.35.0",
 
+    # Cloudinary (temporary image hosting; will be replaced by S3)
+    "cloudinary>=1.40",
+
     # Encryption (token management)
     "cryptography>=43.0.0",
 ]

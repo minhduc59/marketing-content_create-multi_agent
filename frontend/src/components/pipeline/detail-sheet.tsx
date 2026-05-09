@@ -1,15 +1,27 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
-import { X, ExternalLink, CheckCircle2, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { X, ExternalLink, MessageSquare, Rocket, Trash2, CalendarClock } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { BoardCard } from "@/lib/pipeline/stages";
 import { COLUMN_CONFIG } from "@/lib/pipeline/stages";
-import { ScanStatus, type TrendItem } from "@/lib/api/types";
+import { ScanStatus, ContentStatus, type TrendItem } from "@/lib/api/types";
 import { getTrend } from "@/lib/api/trends";
-import { useReviewPost } from "@/hooks/api/use-posts";
+import { useReviewPost, useUpdatePostStatus } from "@/hooks/api/use-posts";
 import { getMediaUrl } from "@/lib/config";
+import { usePublishNow, useAutoPublish, useCancelSchedule } from "@/hooks/api/use-publish";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 
 const SCAN_STATUS_LABEL: Record<ScanStatus, { label: string; className: string }> = {
   [ScanStatus.PENDING]:   { label: "Queued",    className: "bg-gray-100 text-gray-700 border-gray-200" },
@@ -37,16 +49,16 @@ const INTERNAL_STAGES = [
   "Media created",
   "Pending review",
   "Scheduled",
+  "Publishing",
   "Published",
 ];
 
 const STAGE_TO_STEP: Record<string, number> = {
   scanning: 1,
-  generating: 3,
-  pending_review: 5,
-  scheduled: 6,
-  publishing: 7,
-  posted: 8,
+  pending_review: 6,
+  scheduled: 7,
+  publishing: 8,
+  posted: 9,
 };
 
 interface Props {
@@ -56,19 +68,20 @@ interface Props {
 
 export function DetailSheet({ card, onClose }: Props) {
   const [trend, setTrend] = useState<TrendItem | null>(null);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectFeedback, setRejectFeedback] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const review = useReviewPost();
+  const [reviewInputOpen,  setReviewInputOpen]  = useState(false);
+  const [reviewFeedback,   setReviewFeedback]   = useState("");
+  const [publishNowOpen,   setPublishNowOpen]   = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const review         = useReviewPost();
+  const publishNow     = usePublishNow();
+  const autoPublish    = useAutoPublish();
+  const cancelSchedule = useCancelSchedule();
+  const updateStatus   = useUpdatePostStatus();
 
   useEffect(() => {
     if (!card?.post?.trendItemId) { setTrend(null); return; }
     getTrend(card.post.trendItemId).then(setTrend).catch(() => setTrend(null));
   }, [card?.post?.trendItemId]);
-
-  useEffect(() => {
-    if (rejectOpen) textareaRef.current?.focus();
-  }, [rejectOpen]);
 
   // Close on Escape
   useEffect(() => {
@@ -77,10 +90,12 @@ export function DetailSheet({ card, onClose }: Props) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Reset reject state when card changes
+  // Reset dialog/form state when card changes
   useEffect(() => {
-    setRejectOpen(false);
-    setRejectFeedback("");
+    setReviewInputOpen(false);
+    setReviewFeedback("");
+    setPublishNowOpen(false);
+    setDeleteDialogOpen(false);
   }, [card?.id]);
 
   if (!card) return null;
@@ -91,22 +106,49 @@ export function DetailSheet({ card, onClose }: Props) {
   const colConfig = COLUMN_CONFIG[stage];
   const activeStep = STAGE_TO_STEP[stage] ?? 0;
   const isPendingReview = stage === "pending_review";
-  const canShowAnalysis = ["pending_review", "scheduled", "publishing", "posted"].includes(stage) ||
-    (stage === "generating" && trend != null);
+  const isScheduled     = stage === "scheduled";
+  const isAnyPending    = review.isPending || publishNow.isPending ||
+                          autoPublish.isPending || cancelSchedule.isPending || updateStatus.isPending;
+  const canShowAnalysis = ["pending_review", "scheduled", "publishing", "posted"].includes(stage);
   const canShowAngles = trend && ["pending_review", "scheduled", "publishing", "posted"].includes(stage);
   const canShowContent = post && ["pending_review", "scheduled", "publishing", "posted"].includes(stage);
   const canShowThumbnail = post?.imagePath && ["pending_review", "scheduled", "publishing", "posted"].includes(stage);
   const canShowSchedule = publish?.scheduledAt && ["scheduled", "publishing", "posted"].includes(stage);
   const canShowPerformance = stage === "posted";
 
-  function handleApprove() {
+  function handleApproveAndSchedule() {
     if (!post) return;
-    review.mutate({ id: post.id, action: "approve" }, { onSuccess: onClose });
+    review.mutate({ id: post.id, action: "approve" }, {
+      onSuccess: () => autoPublish.mutate({ postId: post.id }, { onSuccess: onClose }),
+    });
   }
-  function handleRejectConfirm() {
+
+  function handleApproveAndPublishNow() {
     if (!post) return;
-    review.mutate({ id: post.id, action: "reject", feedback: rejectFeedback }, {
-      onSuccess: () => { onClose(); setRejectFeedback(""); setRejectOpen(false); },
+    review.mutate({ id: post.id, action: "approve" }, {
+      onSuccess: () => publishNow.mutate({ postId: post.id }, { onSuccess: onClose }),
+    });
+  }
+
+  function handleSendForRevision() {
+    if (!post) return;
+    review.mutate({ id: post.id, action: "reject", feedback: reviewFeedback }, {
+      onSuccess: () => { setReviewFeedback(""); setReviewInputOpen(false); },
+    });
+  }
+
+  function handlePublishNow() {
+    if (!post) return;
+    publishNow.mutate({ postId: post.id }, { onSuccess: onClose });
+  }
+
+  function handleDeleteConfirm() {
+    if (!post) return;
+    cancelSchedule.mutate(post.id, {
+      onSuccess: () => updateStatus.mutate(
+        { id: post.id, status: ContentStatus.DRAFT },
+        { onSuccess: onClose }
+      ),
     });
   }
 
@@ -323,46 +365,136 @@ export function DetailSheet({ card, onClose }: Props) {
           {isPendingReview && post && (
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Review</h3>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                 <Button
-                  className="flex-1 gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
-                  onClick={handleApprove}
-                  disabled={review.isPending}
+                  className="w-full gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
+                  onClick={handleApproveAndSchedule}
+                  disabled={isAnyPending}
                 >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Approve
+                  <CalendarClock className="h-4 w-4" />
+                  Approve &amp; Schedule
                 </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1 gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
-                  onClick={() => setRejectOpen(!rejectOpen)}
-                  disabled={review.isPending}
-                >
-                  <XCircle className="h-4 w-4" />
-                  Reject
-                </Button>
+
+                <AlertDialog open={publishNowOpen} onOpenChange={setPublishNowOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      className="w-full gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                      disabled={isAnyPending}
+                    >
+                      <Rocket className="h-4 w-4" />
+                      Approve &amp; Publish Now
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Publish immediately?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will approve the post and publish it right now, bypassing the golden-hour schedule.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isAnyPending}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                        onClick={(e) => { e.preventDefault(); handleApproveAndPublishNow(); }}
+                        disabled={isAnyPending}
+                      >
+                        {publishNow.isPending || review.isPending ? "Publishing…" : "Publish Now"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+
+                {/* Inline review feedback */}
+                {!reviewInputOpen ? (
+                  <Button
+                    variant="outline"
+                    className="w-full gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50"
+                    onClick={() => setReviewInputOpen(true)}
+                    disabled={isAnyPending}
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    Review
+                  </Button>
+                ) : (
+                  <div className="rounded-md border border-amber-200 bg-amber-50/50 p-3 space-y-2">
+                    <textarea
+                      value={reviewFeedback}
+                      onChange={(e) => setReviewFeedback(e.target.value)}
+                      placeholder="Provide feedback for revision..."
+                      className="w-full resize-none rounded-md border border-amber-200 bg-background p-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-300"
+                      rows={3}
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                        onClick={handleSendForRevision}
+                        disabled={isAnyPending}
+                      >
+                        {review.isPending ? "Sending…" : "Send for Revision"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => { setReviewInputOpen(false); setReviewFeedback(""); }}
+                        disabled={isAnyPending}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
-              {/* Slide-in feedback textarea */}
-              <div className={cn(
-                "overflow-hidden transition-all duration-200",
-                rejectOpen ? "mt-2 max-h-40" : "max-h-0"
-              )}>
-                <textarea
-                  ref={textareaRef}
-                  value={rejectFeedback}
-                  onChange={(e) => setRejectFeedback(e.target.value)}
-                  placeholder="Reason for rejection (optional)..."
-                  className="w-full resize-none rounded-md border border-red-200 bg-background p-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-red-300"
-                  rows={3}
-                />
+            </section>
+          )}
+
+          {/* Scheduled actions */}
+          {isScheduled && post && (
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</h3>
+              <div className="flex flex-col gap-2">
                 <Button
-                  size="sm"
-                  onClick={handleRejectConfirm}
-                  disabled={review.isPending}
-                  className="mt-1.5 w-full bg-red-600 hover:bg-red-700 text-white"
+                  className="w-full gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                  onClick={handlePublishNow}
+                  disabled={isAnyPending}
                 >
-                  Confirm Rejection
+                  <Rocket className="h-4 w-4" />
+                  Publish Now
                 </Button>
+
+                <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
+                      disabled={isAnyPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Cancel scheduled publish?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will cancel the schedule and revert the post to Draft (back to the Generating column).
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isAnyPending}>Keep scheduled</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                        onClick={(e) => { e.preventDefault(); handleDeleteConfirm(); }}
+                        disabled={isAnyPending}
+                      >
+                        {cancelSchedule.isPending || updateStatus.isPending ? "Deleting…" : "Yes, delete"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </section>
           )}

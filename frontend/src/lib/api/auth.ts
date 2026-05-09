@@ -38,8 +38,17 @@ export function getGoogleLoginUrl(): string {
   return `${apiClient.defaults.baseURL}/auth/google`;
 }
 
-export function getTiktokLoginUrl(): string {
-  return `${apiClient.defaults.baseURL}/auth/tiktok/login`;
-}
+// Note: baseURL already includes /v1, so this resolves to /v1/auth/google.
 
-// Note: baseURL already includes /v1, so these resolve to /v1/auth/google etc.
+/**
+ * Fetch the Zernio TikTok OAuth URL for the current user.
+ *
+ * The endpoint is JWT-authenticated and resolves to the user's per-account
+ * Zernio profile. The caller should redirect the browser to the returned URL.
+ */
+export async function fetchTiktokConnectUrl(): Promise<string> {
+  const { data } = await apiClient.get<{ url: string }>(
+    "/publisher/tiktok/link-url",
+  );
+  return data.url;
+}

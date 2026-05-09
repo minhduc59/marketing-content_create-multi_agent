@@ -10,7 +10,7 @@ import {
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
-import type { Server, Socket } from 'socket.io';
+import type { Namespace, Socket } from 'socket.io';
 import { AiServiceClient } from '../ai-service/ai-service.client';
 
 interface AuthedSocket extends Socket {
@@ -43,7 +43,7 @@ export class StatusGateway
   private readonly logger = new Logger(StatusGateway.name);
   private static readonly POLL_INTERVAL_MS = 2_000;
 
-  @WebSocketServer() server!: Server;
+  @WebSocketServer() server!: Namespace;
 
   /** roomId -> setInterval handle */
   private readonly pollers = new Map<string, NodeJS.Timeout>();
@@ -130,7 +130,7 @@ export class StatusGateway
 
   private maybeStopPolling(room: string): void {
     const stillSubscribed =
-      (this.server.sockets.adapter.rooms.get(room)?.size ?? 0) > 0;
+      (this.server.adapter?.rooms.get(room)?.size ?? 0) > 0;
     if (stillSubscribed) return;
     const handle = this.pollers.get(room);
     if (handle) {
@@ -138,6 +138,11 @@ export class StatusGateway
       this.pollers.delete(room);
       this.lastStatus.delete(room);
     }
+  }
+
+  // Called from publisher webhook handlers to push real-time events
+  notifyRoom(room: string, event: string, data: unknown): void {
+    this.server.to(room).emit(event, data);
   }
 
   private async tick(room: string, userId: string): Promise<void> {
