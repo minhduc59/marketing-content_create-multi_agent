@@ -1,5 +1,70 @@
 # CLAUDE.md
 
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Repository Overview
@@ -129,46 +194,6 @@ LLM clients in `app/clients/openai_client.py` (all GPT-4o via `langchain-openai`
 - **RefreshToken**: JWT refresh token tracking
 - **AuditLog**: action logging
 
-Key enums: `ScanStatus`, `Platform` (hackernews), `Sentiment`, `TrendLifecycle`, `ContentStatus`, `PostFormat` (7 formats), `PublishStatus`, `PublishMode`
-
-### API Endpoints
-
-**AI Service** (`app/api/v1/` — port 8000):
-- `POST /api/v1/scan` — trigger async scan (202)
-- `GET /api/v1/scan/{scan_id}/status` — poll scan progress
-- `GET /api/v1/trends` — list with filters + pagination
-- `GET /api/v1/trends/top` — top trends by time window
-- `GET /api/v1/trends/{trend_id}` — full detail
-- `POST/GET /api/v1/scan/schedule` — cron schedule management
-- `GET /api/v1/reports` / `GET /api/v1/reports/{scan_run_id}` — reports
-- `POST /api/v1/posts/generate` — trigger post generation (202)
-- `GET /api/v1/posts` / `GET /api/v1/posts/{id}` — list/detail posts
-- `PATCH /api/v1/posts/{id}/status` — update post status
-- `POST /api/v1/publish/{id}` — publish to TikTok
-- `GET /api/v1/auth/tiktok/login` — TikTok OAuth redirect
-- `GET /api/v1/auth/tiktok/callback` — TikTok OAuth callback
-
-**Backend Gateway** (NestJS — port 3000, global prefix `/v1`, JWT required unless noted):
-- `POST /v1/auth/register` — register (public)
-- `POST /v1/auth/login` — login (public)
-- `POST /v1/auth/refresh` — rotate tokens (public)
-- `POST /v1/auth/logout` — revoke token
-- `GET /v1/auth/me` — current user profile
-- `GET /v1/auth/google` — Google OAuth (public)
-- `GET/POST /v1/scans` — list/trigger scans
-- `GET /v1/scans/{id}/status` — poll scan status
-- `GET /v1/trends` — list trends with filters
-- `GET /v1/trends/top` — top trends by time window
-- `GET /v1/posts` — list content posts
-- `POST /v1/posts/generate` — generate posts (proxied to ai-service)
-- `PATCH /v1/posts/{id}/status` — update post workflow status
-- `POST /v1/publish/{postId}` — publish immediately
-- `POST /v1/publish/{postId}/schedule` — schedule publish
-- `POST /v1/publish/{postId}/auto` — auto-schedule at golden hour
-- `DELETE /v1/publish/{postId}/schedule` — cancel scheduled publish
-- `GET /v1/publish/{publishedPostId}/status` — poll publish status
-- `GET /v1/publish/golden-hours` — engagement golden hours
-- `GET /v1/reports` — list reports
 
 ### External Services
 
@@ -176,7 +201,6 @@ Key enums: `ScanStatus`, `Platform` (hackernews), `Sentiment`, `TrendLifecycle`,
 |---------|--------|---------|
 | HackerNews | `app/tools/hackernews_tool.py` | Firebase API — crawl top stories |
 | OpenAI GPT-4o | `app/clients/openai_client.py` | Trend analysis, content generation, review |
-| BFL (Black Forest Labs) | `app/clients/bfl_client.py` | Image generation |
 | TikTok API | `app/clients/tiktok_client.py` | OAuth + photo post publishing |
 | Firecrawl | `app/clients/firecrawl_client.py` | Web scraping fallback |
 

@@ -148,11 +148,27 @@ async def resolve_and_validate_node(state: PublishPostState) -> dict:
         )
         pub.assembled_caption = caption
 
-        # The image_path column now stores a public Cloudinary https URL
-        # written by image_generation_node. Reject anything else (legacy
-        # local-path rows from before this migration must be regenerated).
-        image_public_url = post.image_path or ""
-        assert_cloudinary_url(image_public_url)
+        # Resolve the media URL depending on content type.
+        # Photo path (default): image_path is a Cloudinary https URL — reject anything else.
+        # Video path: load the linked VideoClip and get its storage_url.
+        post_content_type = getattr(post, "content_type", "photo") or "photo"
+        video_url = ""
+        if post_content_type == "video":
+            from app.db.models.video_clip import VideoClip
+            clip_result = await db.execute(
+                select(VideoClip).where(VideoClip.content_post_id == post.id)
+            )
+            video_clip = clip_result.scalar_one_or_none()
+            if not video_clip:
+                raise ValueError(
+                    f"ContentPost {content_post_id} is a video post but has no linked VideoClip"
+                )
+            video_url = video_clip.storage_url
+            assert_cloudinary_url(video_url)
+            image_public_url = ""
+        else:
+            image_public_url = post.image_path or ""
+            assert_cloudinary_url(image_public_url)
 
         await db.commit()
 
@@ -160,13 +176,16 @@ async def resolve_and_validate_node(state: PublishPostState) -> dict:
         "resolve: validated",
         content_post_id=content_post_id,
         published_post_id=published_post_id,
-        image_url=image_public_url[:80],
+        content_type=post_content_type,
+        media_url=(video_url or image_public_url)[:80],
     )
 
     return {
         "published_post_id": published_post_id,
         "assembled_caption": caption,
         "image_public_url": image_public_url,
+        "content_type": post_content_type,
+        "video_url": video_url,
     }
 
 

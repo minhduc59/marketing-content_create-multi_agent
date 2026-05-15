@@ -73,3 +73,29 @@ class PublishStatus(str, enum.Enum):
 class PublishMode(str, enum.Enum):
     AUTO = "auto"
     MANUAL = "manual"
+
+
+class ContentType(str, enum.Enum):
+    PHOTO = "photo"
+    VIDEO = "video"
+
+
+class VideoTaskStatus(str, enum.Enum):
+    QUEUED = "queued"
+    DOWNLOADING = "downloading"
+    TRANSCRIBING = "transcribing"
+    ANALYZING = "analyzing"
+    CLIPPING = "clipping"
+    CAPTIONING = "captioning"
+    UPLOADING = "uploading"
+    COMPLETED = "completed"
+    ERROR = "error"
+    CANCELLED = "cancelled"
+
+
+class VideoClipStatus(str, enum.Enum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    PUBLISHED = "published"
+    FAILED = "failed"

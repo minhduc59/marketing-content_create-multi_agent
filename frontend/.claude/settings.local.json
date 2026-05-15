@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(grep -E \"\\(py|ts\\)$\")",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "mcp__code-review-graph__semantic_search_nodes_tool",
+      "Bash(docker compose *)"
     ]
   },
   "enabledMcpjsonServers": [

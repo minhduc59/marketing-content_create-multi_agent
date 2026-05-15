@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     INTERNAL_API_KEY: str = ""
     REQUIRE_INTERNAL_AUTH: bool = False
 
+    # AssemblyAI (video transcription)
+    ASSEMBLY_AI_API_KEY: str = ""
+
+    # Video Clipper
+    VIDEO_TEMP_DIR: str = "/tmp/marketing-video-clipper"
+
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"

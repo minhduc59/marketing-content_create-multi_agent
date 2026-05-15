@@ -51,6 +51,8 @@ async def run_publish_pipeline(
         golden_hour_result={},
         scheduled_at="",
         provider_post_id="",
+        content_type="",
+        video_url="",
         publish_status="",
         error="",
     )

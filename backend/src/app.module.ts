@@ -14,6 +14,11 @@ import { ReportsModule } from './reports/reports.module';
 import { TiktokAuthModule } from './tiktok-auth/tiktok-auth.module';
 import { StatusModule } from './status/status.module';
 import { PublisherModule } from './publisher/publisher.module';
+import { VideoTasksModule } from './video-tasks/video-tasks.module';
+import { VideoClipsModule } from './video-clips/video-clips.module';
+import { FontsModule } from './fonts/fonts.module';
+import { CaptionTemplatesModule } from './caption-templates/caption-templates.module';
+import { MediaModule } from './media/media.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { HealthController } from './common/health.controller';
 
@@ -33,6 +38,11 @@ import { HealthController } from './common/health.controller';
     TiktokAuthModule,
     StatusModule,
     PublisherModule,
+    VideoTasksModule,
+    VideoClipsModule,
+    FontsModule,
+    CaptionTemplatesModule,
+    MediaModule,
   ],
   controllers: [HealthController],
   providers: [

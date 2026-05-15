@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__code-review-graph__build_or_update_graph_tool",
+      "Bash(xargs -I {} sh -c 'grep -l \"clip\\\\|Clip\" \"{}\" 2>/dev/null || true')",
+      "Bash(python -c \"from app.db.models import VideoTask, VideoClip, BrandFont, CaptionTemplate, ContentType, VideoTaskStatus, VideoClipStatus; print\\('imports OK'\\)\")",
+      "Bash(python3 -c \"from app.db.models import VideoTask, VideoClip, BrandFont, CaptionTemplate, ContentType, VideoTaskStatus, VideoClipStatus; print\\('imports OK'\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(pip3 show *)",
+      "Bash(PYTHONPATH=. python3 -c ' *)",
+      "Bash(python3 *)",
+      "Bash(python3.11 -c \"import alembic; print\\('alembic', alembic.__version__\\)\")",
+      "Bash(PYTHONPATH=. python3.11 -c ' *)",
+      "Bash(npx prisma *)",
+      "Bash(python3.11 -c ' *)",
+      "Bash(python -c ' *)",
+      "Bash(python3.11 -c \"import structlog\")",
+      "Bash(python3.11 -m pytest tests/test_agents/test_video_clipper/ -v)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "code-review-graph",
+    "hackernews"
+  ]
+}

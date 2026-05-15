@@ -15,6 +15,7 @@ This document tracks all implemented and planned features. Focus: **TikTok** pla
 | F06 | TikTok Publishing | Pipeline 3: Publish | Implemented |
 | F07 | Backend API Layer | Backend (NestJS) | Implemented |
 | F08 | Frontend Dashboard | Frontend (Next.js) | Implemented |
+| F09 | [Video Clipper Agent](10-video-clipper-agent.md) | Parallel pipeline (long-form video → TikTok clips) | Planned |
 
 ---
 

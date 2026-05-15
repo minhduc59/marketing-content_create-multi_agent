@@ -23,6 +23,10 @@ class PublishPostState(TypedDict):
     # Publish results (set by publish_node)
     provider_post_id: str      # Publisher (Zernio) post ID returned by backend
 
+    # Video branch — populated when content_type == "video"
+    content_type: str   # "photo" | "video"; defaults to "photo" when not set
+    video_url: str      # Cloudinary https URL for the clip; "" for photo posts
+
     # Final
     publish_status: str        # "processing" | "scheduled" | "failed"
     error: str

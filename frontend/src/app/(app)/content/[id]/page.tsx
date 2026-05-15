@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
+import DynamicVideoPlayer from "@/components/video-clipper/dynamic-video-player";
 import { format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,18 @@ export default function ContentDetailPage({
               </p>
             </CardContent>
           </Card>
+
+          {/* Video preview — shown for video-type content posts */}
+          {(post as { contentType?: string }).contentType === "video" && post.imagePath && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Video Clip</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DynamicVideoPlayer src={post.imagePath} />
+              </CardContent>
+            </Card>
+          )}
 
           {/* Hashtags */}
           <Card>

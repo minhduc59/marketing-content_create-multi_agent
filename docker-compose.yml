@@ -2,6 +2,7 @@
 #   postgres (+ init-db.sql for role bootstrap)
 #   redis
 #   ai-service (FastAPI / LangGraph)
+#   ai-worker  (arq video-processing queue worker)
 #   backend    (NestJS API gateway)
 #
 # The ai-service project keeps its own `ai-service/docker-compose.yml`
@@ -58,6 +59,24 @@ services:
       - ./ai-service/posts:/app/posts
       - ./ai-service/reports:/app/reports
       - ./ai-service/strategy:/app/strategy
+
+  ai-worker:
+    build:
+      context: ./ai-service
+    command: ["arq", "app.workers.video_worker.WorkerSettings"]
+    env_file:
+      - ./ai-service/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ai_svc:ai_svc_pass@postgres:5432/trending_scanner
+      REDIS_URL: redis://redis:6379/0
+      REQUIRE_INTERNAL_AUTH: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./ai-service/app:/app/app
 
   backend:
     build:

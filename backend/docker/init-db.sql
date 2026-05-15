@@ -51,6 +51,15 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA app TO backend_svc;
 GRANT SELECT ON ALL TABLES IN SCHEMA ai TO backend_svc;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ai TO backend_svc;
 
+-- Narrow write surface: backend_svc owns user-facing create/update flows
+-- for the video clipper pipeline. ai_svc still owns enrichment writes
+-- (transcripts, scores, storage_url, etc.).
+GRANT INSERT, UPDATE ON ai.video_tasks         TO backend_svc;
+GRANT INSERT, UPDATE ON ai.video_clips         TO backend_svc;
+GRANT INSERT, UPDATE ON ai.content_posts       TO backend_svc;
+GRANT INSERT          ON ai.brand_fonts        TO backend_svc;
+GRANT INSERT          ON ai.caption_templates  TO backend_svc;
+
 -- Default privileges for objects Alembic creates later (as scanner)
 ALTER DEFAULT PRIVILEGES FOR ROLE scanner IN SCHEMA ai
   GRANT ALL ON TABLES TO ai_svc;

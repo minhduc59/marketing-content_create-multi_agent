@@ -26,6 +26,8 @@ async def _call_backend_publish(
     caption: str,
     tags: list[str],
     scheduled_at: str | None,
+    media_type: str = "PHOTO",
+    video_url: str = "",
 ) -> dict:
     """POST to NestJS backend /v1/publisher/internal/publish.
 
@@ -36,15 +38,21 @@ async def _call_backend_publish(
     backend_url = settings.BACKEND_ORIGIN.rstrip("/")
     url = f"{backend_url}/v1/publisher/internal/publish"
 
+    # Base payload shared by both photo and video paths
     payload: dict = {
         "publishedPostId": published_post_id,
         "userId": user_id,
-        "imageUrl": image_url,
         "caption": caption,
         "tags": tags,
     }
     if scheduled_at:
         payload["scheduledAt"] = scheduled_at
+
+    # Media-type-specific field — exactly one of imageUrl / videoUrl is sent
+    if media_type == "VIDEO":
+        payload["videoUrl"] = video_url
+    else:
+        payload["imageUrl"] = image_url
 
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
@@ -73,10 +81,17 @@ async def publish_node(state: PublishPostState) -> dict:
     caption = state["assembled_caption"]
     image_url = state["image_public_url"]
     scheduled_at = state.get("scheduled_at") or None
+    content_type = state.get("content_type", "photo") or "photo"
+    video_url = state.get("video_url", "") or ""
 
-    # Final guard before the Zernio call — refuses anything that isn't a
-    # public Cloudinary https URL so we never hand a local path to Zernio.
-    assert_cloudinary_url(image_url)
+    # Guard: photo posts require a public Cloudinary image URL.
+    # Video posts require a public Cloudinary video URL (checked at resolve time).
+    if content_type == "video":
+        assert_cloudinary_url(video_url)
+        media_type = "VIDEO"
+    else:
+        assert_cloudinary_url(image_url)
+        media_type = "PHOTO"
 
     last_error = ""
     provider_post_id = ""
@@ -97,6 +112,8 @@ async def publish_node(state: PublishPostState) -> dict:
                 caption=caption,
                 tags=[],
                 scheduled_at=scheduled_at,
+                media_type=media_type,
+                video_url=video_url,
             )
 
             provider_post_id = result.get("postId", "")
