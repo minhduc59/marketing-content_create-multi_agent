@@ -38,8 +38,13 @@ dependencies = [
     # Cloud storage (S3 for production)
     "boto3>=1.35.0",
 
-    # Cloudinary (temporary image hosting; will be replaced by S3)
+    # Cloudinary (media hosting for generated images and video clips)
     "cloudinary>=1.40",
+
+    # Video Clipper Agent dependencies
+    "assemblyai>=0.37.0",
+    "yt-dlp>=2024.1.0",
+    "arq>=0.25.0",
 
     # Encryption (token management)
     "cryptography>=43.0.0",

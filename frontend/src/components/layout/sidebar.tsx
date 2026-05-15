@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   X,
+  Scissors,
 } from "lucide-react";
 
 import { useAuthStore } from "@/stores/auth-store";
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/media", label: "Media", icon: Image },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/video-clipper", label: "Video Clipper", icon: Scissors },
   { href: "/settings/keywords", label: "Settings", icon: Settings },
 ];
 

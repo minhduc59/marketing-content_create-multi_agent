@@ -256,6 +256,7 @@ model ScanRun {
 
   trendItems   TrendItem[]
   contentPosts ContentPost[]
+  videoTasks   VideoTask[]
 
   @@index([triggeredBy])
   @@map("scan_runs")
@@ -312,19 +313,19 @@ model TrendItem {
 }
 
 model ContentPost {
-  id                   String        @id @db.Uuid
+  id                   String        @id @default(uuid()) @db.Uuid
   scanRunId            String        @map("scan_run_id") @db.Uuid
   trendItemId          String?       @map("trend_item_id") @db.Uuid
   createdBy            String?       @map("created_by") @db.Uuid
   format               PostFormat
   caption              String
-  hashtags             Json
+  hashtags             Json          @default("[]")
   cta                  String?
   imagePrompt          Json?         @map("image_prompt")
   trendTitle           String        @map("trend_title")
   trendUrl             String?       @map("trend_url")
   contentAngleUsed     String?       @map("content_angle_used")
-  targetAudience       Json          @map("target_audience")
+  targetAudience       Json          @default("[]") @map("target_audience")
   wordCount            Int?          @map("word_count")
   estimatedReadTime    String?       @map("estimated_read_time")
   engagementPrediction String?       @map("engagement_prediction")
@@ -332,19 +333,23 @@ model ContentPost {
   bestPostingTime      String?       @map("best_posting_time")
   timingWindow         String?       @map("timing_window")
   // WRITABLE: NestJS can update status (review queue).
-  status               ContentStatus
+  status               ContentStatus @default(draft)
   reviewScore          Float?        @map("review_score")
   reviewNotes          String?       @map("review_notes")
   reviewCriteria       Json?         @map("review_criteria")
-  revisionCount        Int           @map("revision_count")
-  isPromoted           Boolean       @map("is_promoted")
+  revisionCount        Int           @default(0) @map("revision_count")
+  isPromoted           Boolean       @default(false) @map("is_promoted")
   filePath             String?       @map("file_path")
   imagePath            String?       @map("image_path")
-  createdAt            DateTime      @map("created_at")
+  createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime?     @map("updated_at")
+
+  // Pipeline discriminator — 'photo' (default, existing rows) or 'video'
+  contentType    String        @default("photo") @map("content_type")
 
   scanRun        ScanRun         @relation(fields: [scanRunId], references: [id])
   publishedPosts PublishedPost[]
+  videoClip      VideoClip?
 
   @@index([createdBy])
   @@index([scanRunId])
@@ -374,6 +379,7 @@ model PublishedPost {
   updatedAt        DateTime?     @map("updated_at")
 
   contentPost ContentPost @relation(fields: [contentPostId], references: [id], onDelete: Cascade)
+  videoClips  VideoClip[]
 
   @@index([publishedBy])
   @@index([contentPostId])
@@ -397,5 +403,109 @@ model EngagementTimeSlot {
 
   @@unique([platform, slotIndex])
   @@map("engagement_time_slots")
+  @@schema("ai")
+}
+
+// =========================================================================
+// Video Clipper — ai schema (added in migration a9b8c7d6e5f4)
+// =========================================================================
+
+model BrandFont {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String?   @map("user_id") @db.Uuid
+  name            String
+  storageUrl      String    @map("storage_url")
+  storagePublicId String    @map("storage_public_id")
+  isDefault       Boolean   @default(false) @map("is_default")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  videoTasks VideoTask[]
+
+  @@index([userId])
+  @@map("brand_fonts")
+  @@schema("ai")
+}
+
+model CaptionTemplate {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String?   @map("user_id") @db.Uuid
+  name             String
+  fontSize         Int       @default(40) @map("font_size")
+  color            String    @default("#FFFFFF")
+  outlineColor     String    @default("#000000") @map("outline_color")
+  outlineWidth     Int       @default(2) @map("outline_width")
+  verticalPosition String    @default("bottom") @map("vertical_position")
+  stylePayload     Json?     @map("style_payload")
+  isDefault        Boolean   @default(false) @map("is_default")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  videoTasks VideoTask[]
+
+  @@index([userId])
+  @@map("caption_templates")
+  @@schema("ai")
+}
+
+model VideoTask {
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  sourceType        String    @map("source_type")
+  sourceRef         String    @map("source_ref")
+  fontId            String?   @map("font_id") @db.Uuid
+  captionTemplateId String?   @map("caption_template_id") @db.Uuid
+  maxClips          Int       @default(5) @map("max_clips")
+  status            String    @default("queued")
+  progress          Int       @default(0)
+  progressMessage   String?   @map("progress_message")
+  errorMessage      String?   @map("error_message")
+  tempDir           String?   @map("temp_dir")
+  scanRunId         String?   @map("scan_run_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime? @map("updated_at")
+  startedAt         DateTime? @map("started_at")
+  completedAt       DateTime? @map("completed_at")
+
+  font            BrandFont?       @relation(fields: [fontId], references: [id])
+  captionTemplate CaptionTemplate? @relation(fields: [captionTemplateId], references: [id])
+  scanRun         ScanRun?         @relation(fields: [scanRunId], references: [id])
+  clips           VideoClip[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("video_tasks")
+  @@schema("ai")
+}
+
+model VideoClip {
+  id              String    @id @db.Uuid
+  taskId          String    @map("task_id") @db.Uuid
+  contentPostId   String?   @unique @map("content_post_id") @db.Uuid
+  clipIndex       Int       @map("clip_index")
+  storageUrl      String    @map("storage_url")
+  storagePublicId String    @map("storage_public_id")
+  durationSeconds Float     @map("duration_seconds")
+  startMs         Int       @map("start_ms")
+  endMs           Int       @map("end_ms")
+  transcriptSegment String? @map("transcript_segment")
+  llmScore        Float?    @map("llm_score")
+  llmRationale    String?   @map("llm_rationale")
+  hookScore       Float?    @map("hook_score")
+  engagementScore Float?    @map("engagement_score")
+  status          String    @default("draft")
+  feedback        String?
+  platformPostId  String?   @map("platform_post_id")
+  publishedPostId String?   @map("published_post_id") @db.Uuid
+  createdAt       DateTime  @map("created_at")
+  updatedAt       DateTime? @map("updated_at")
+
+  task          VideoTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  contentPost   ContentPost? @relation(fields: [contentPostId], references: [id])
+  publishedPost PublishedPost? @relation(fields: [publishedPostId], references: [id])
+
+  @@index([taskId])
+  @@index([contentPostId])
+  @@index([status])
+  @@map("video_clips")
   @@schema("ai")
 }

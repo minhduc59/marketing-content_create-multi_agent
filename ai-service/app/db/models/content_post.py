@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey
 
 from app.db.base import Base
-from app.db.models.enums import ContentStatus, PostFormat
+from app.db.models.enums import ContentStatus, ContentType, PostFormat
 
 
 class ContentPost(Base):
@@ -25,6 +25,11 @@ class ContentPost(Base):
     )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, index=True
+    )
+
+    # Pipeline discriminator — 'photo' (default) or 'video'
+    content_type: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="photo", default=ContentType.PHOTO.value
     )
 
     # Content
@@ -81,3 +86,4 @@ class ContentPost(Base):
     published_posts = relationship(
         "PublishedPost", back_populates="content_post", cascade="all, delete-orphan"
     )
+    video_clip = relationship("VideoClip", back_populates="content_post", uselist=False)

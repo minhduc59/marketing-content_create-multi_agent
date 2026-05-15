@@ -11,6 +11,7 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import type { Namespace, Socket } from 'socket.io';
+import Redis from 'ioredis';
 import { AiServiceClient } from '../ai-service/ai-service.client';
 
 interface AuthedSocket extends Socket {
@@ -18,7 +19,7 @@ interface AuthedSocket extends Socket {
     userId?: string;
     email?: string;
     role?: 'admin' | 'user';
-    subscriptions?: Set<string>; // `scan:<id>` | `publish:<id>`
+    subscriptions?: Set<string>; // `scan:<id>` | `publish:<id>` | `video:<id>`
   };
 }
 
@@ -49,6 +50,8 @@ export class StatusGateway
   private readonly pollers = new Map<string, NodeJS.Timeout>();
   /** roomId -> last known status (used to decide whether to emit) */
   private readonly lastStatus = new Map<string, string>();
+  /** video roomId -> dedicated Redis subscriber connection */
+  private readonly videoSubscribers = new Map<string, Redis>();
 
   constructor(
     private readonly jwt: JwtService,
@@ -82,32 +85,46 @@ export class StatusGateway
 
   handleDisconnect(client: AuthedSocket): void {
     const rooms = client.data.subscriptions ?? new Set<string>();
-    for (const room of rooms) this.maybeStopPolling(room);
+    for (const room of rooms) {
+      if (room.startsWith('video:')) {
+        this.maybeStopVideoSubscriber(room);
+      } else {
+        this.maybeStopPolling(room);
+      }
+    }
   }
 
   @SubscribeMessage('subscribe')
   subscribe(
     @ConnectedSocket() client: AuthedSocket,
-    @MessageBody() payload: { resource: 'scan' | 'publish'; id: string },
+    @MessageBody() payload: { resource: 'scan' | 'publish' | 'video'; id: string },
   ) {
     if (!payload?.resource || !payload?.id) return { ok: false };
     const room = `${payload.resource}:${payload.id}`;
     client.join(room);
     client.data.subscriptions?.add(room);
-    this.ensurePolling(room, client.data.userId!);
+    if (payload.resource === 'video') {
+      this.ensureVideoSubscriber(room, payload.id);
+    } else {
+      this.ensurePolling(room, client.data.userId!);
+    }
     return { ok: true, room };
   }
 
   @SubscribeMessage('unsubscribe')
   unsubscribe(
     @ConnectedSocket() client: AuthedSocket,
-    @MessageBody() payload: { resource: 'scan' | 'publish'; id: string },
+    @MessageBody() payload: { resource: 'scan' | 'publish' | 'video'; id: string },
   ) {
     if (!payload?.resource || !payload?.id) return { ok: false };
     const room = `${payload.resource}:${payload.id}`;
     client.leave(room);
     client.data.subscriptions?.delete(room);
-    this.maybeStopPolling(room);
+    if (payload.resource === 'video') {
+      this.maybeStopVideoSubscriber(room);
+    } else {
+      this.maybeStopPolling(room);
+    }
     return { ok: true };
   }
 
@@ -137,6 +154,55 @@ export class StatusGateway
       clearInterval(handle);
       this.pollers.delete(room);
       this.lastStatus.delete(room);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Video room — Redis pub/sub (one subscriber connection per active task).
+  // The ai-service worker publishes to `video:progress:{taskId}`; we
+  // subscribe here and rebroadcast to the WebSocket room `video:{taskId}`.
+  // -------------------------------------------------------------------------
+
+  private ensureVideoSubscriber(room: string, taskId: string): void {
+    if (this.videoSubscribers.has(room)) return;
+    const redisUrl = this.config.get<string>('REDIS_URL', 'redis://localhost:6379');
+    const sub = new Redis(redisUrl);
+    const channel = `video:progress:${taskId}`;
+    sub.subscribe(channel, (err) => {
+      if (err) this.logger.error(`Redis subscribe failed for ${channel}: ${err.message}`);
+    });
+    sub.on('message', (_ch: string, message: string) => {
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(message) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+      const status = payload['status'] as string | undefined;
+      if (status === 'completed') {
+        this.server.to(room).emit('video.completed', payload);
+        this.maybeStopVideoSubscriber(room);
+      } else if (status === 'error') {
+        this.server.to(room).emit('video.error', payload);
+        this.maybeStopVideoSubscriber(room);
+      } else {
+        this.server.to(room).emit('video.progress', payload);
+      }
+    });
+    sub.on('error', (err: Error) => {
+      this.logger.warn(`Redis subscriber error for ${room}: ${err.message}`);
+    });
+    this.videoSubscribers.set(room, sub);
+  }
+
+  private maybeStopVideoSubscriber(room: string): void {
+    const stillSubscribed =
+      (this.server.adapter?.rooms.get(room)?.size ?? 0) > 0;
+    if (stillSubscribed) return;
+    const sub = this.videoSubscribers.get(room);
+    if (sub) {
+      sub.disconnect();
+      this.videoSubscribers.delete(room);
     }
   }
 

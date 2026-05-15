@@ -18,13 +18,21 @@ Cac chuyen gia cong nghe va content creator ton **2-3 gio/ngay** de:
 
 ## 2. Kien truc tong the — Three-Tier Architecture
 
-He thong su dung kien truc 3 tang voi 3 LangGraph pipelines:
+He thong su dung kien truc 3 tang voi cac LangGraph pipelines chay song song theo `content_type`:
 
 ```
-Pipeline 1: HN Scanner → Trend Analyzer → Content Saver → Persist → [conditional] → Pipeline 2
-Pipeline 2: Strategy → Content Gen → Image Gen → Auto-Review → [revision loop] → Output
-Pipeline 3: Validate → Golden Hour → Scheduler → [conditional] → TikTok Publish
+Photo path (content_type=photo):
+  Pipeline 1: HN Scanner → Trend Analyzer → Content Saver → Persist → [conditional] → Pipeline 2
+  Pipeline 2: Strategy → Content Gen → Image Gen → Auto-Review → [revision loop] → Output
+  Pipeline 3: Validate → Golden Hour → Scheduler → [conditional] → TikTok Publish
+
+Video path (content_type=video) — parallel branch, shares Review + Publish:
+  Pipeline 4: Video Clipper (arq worker) — yt-dlp/upload → transcribe → LLM select → ffmpeg cut + caption → Cloudinary → draft clips
+         ↓ shared Human Review + Scheduler
+  Pipeline 3: ...same publish flow, mediaType=VIDEO via Zernio
 ```
+
+See [10-video-clipper-agent.md](10-video-clipper-agent.md) for the video path.
 
 ### So do kien truc phan tang
 

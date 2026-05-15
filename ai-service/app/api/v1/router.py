@@ -7,6 +7,7 @@ from app.api.v1.schedule import router as schedule_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.posts import router as posts_router
 from app.api.v1.publish import router as publish_router
+from app.api.v1.video_tasks import router as video_tasks_router
 
 v1_router = APIRouter()
 v1_router.include_router(auth_router, prefix="/auth", tags=["auth"])
@@ -16,3 +17,4 @@ v1_router.include_router(schedule_router, prefix="/scan/schedule", tags=["schedu
 v1_router.include_router(reports_router, prefix="/reports", tags=["reports"])
 v1_router.include_router(posts_router, prefix="/posts", tags=["posts"])
 v1_router.include_router(publish_router, prefix="/publish", tags=["publish"])
+v1_router.include_router(video_tasks_router, prefix="/video-tasks", tags=["video-tasks"])

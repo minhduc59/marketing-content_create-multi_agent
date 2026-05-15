@@ -61,7 +61,7 @@ export class AiServiceClient {
       const upstreamStatus = axiosErr.response?.status;
       const upstreamBody = axiosErr.response?.data;
       this.logger.error(
-        `ai-service ${method} ${url} failed: ${upstreamStatus} ${JSON.stringify(upstreamBody)}`,
+        `ai-service ${method} ${url} failed: ${upstreamStatus ?? axiosErr.message} ${JSON.stringify(upstreamBody)}`,
       );
       if (upstreamStatus) {
         throw new HttpException(
@@ -116,5 +116,10 @@ export class AiServiceClient {
   }
   getGoldenHours(userId: string) {
     return this.request('GET', '/api/v1/publish/golden-hours', userId);
+  }
+
+  // ---- Video Tasks
+  triggerVideoPipeline(userId: string, taskId: string) {
+    return this.request('POST', `/api/v1/video-tasks/${taskId}/run`, userId);
   }
 }
